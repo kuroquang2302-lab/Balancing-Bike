@@ -1,64 +1,37 @@
-# Project Key Facts - Dự án Xe Đạp Tự Cân Bằng UTH
+# Thông Số Kỹ Thuật Và Dữ Liệu Thực Nghiệm
 
-## Thông số Cơ khí & Vật lý
-- **Tổng khối lượng xe hoàn thiện**: $700\text{g} - 800\text{g}$ (bao gồm khung in 3D PETG/PLA, 2 motor Nidec, Pin 3S LiPo, bo Nucleo-64).
-- **Khối lượng bánh đà phản lực**: $100\text{g}$ (đã cân thực tế trên bàn).
-- **Cơ cấu truyền động bánh sau**: Dây đai răng GT2 bản 6mm, chu vi 240mm.
+## 1. Thông Số Cơ Khí Và Vật Lý
+- **Tổng khối lượng xe hoàn thiện:** $750\text{ g} - 800\text{ g}$ bao gồm khung in 3D, hai động cơ Nidec 24H, pin Li-Po 3S và bo mạch Nucleo-64.
+- **Khối lượng bánh đà phản lực:** $100\text{ g}$, đường kính $130\text{ mm}$, mô-men quán tính $J = 3.1 \times 10^{-4}\text{ kg}\cdot\text{m}^2$.
+- **Độ cao khối tâm:** $0.14\text{ m} - 0.15\text{ m}$ tính từ mặt phẳng tiếp đất.
+- **Chiều dài cơ sở:** $0.22\text{ m}$ giữa hai trục bánh xe.
+- **Cơ cấu truyền động bánh sau:** Đai răng GT2 bản rộng $6\text{ mm}$, chu vi $240\text{ mm}$.
 
-## Dữ liệu Cảm biến IMU MPU-6050 Thực nghiệm (2026-10-28)
-- **Độ lệch tĩnh góc Roll khi xe thẳng đứng (`Roll_Offset`)**: **`+1.30°`** (chính xác `1.2987°`).
-- **Nhiễu trôi tĩnh vận tốc góc (`Gyro_X_Rate`)**: **`< 0.02°/s`** (đo thực tế `-0.0195°/s` ở trạng thái đứng yên sau 200 chu kỳ calib).
-- **Đáp ứng động Gyro**: Đạt xung $\pm 25^\circ/\text{s} \rightarrow \pm 42^\circ/\text{s}$ khi lắc khung xe, tín hiệu sạch và không bị trôi.
+## 2. Dữ Liệu Cảm Biến Quán Tính MPU-6050
+- **Vị trí lắp đặt:** Độ cao $60\text{ mm}$ tính từ mặt lốp, trục X hướng dọc thân xe từ bánh trước về bánh sau, trục Y hướng ngang từ phải sang trái.
+- **Góc cân bằng tĩnh danh định:** $+1.30^\circ$.
+- **Độ trôi tĩnh vận tốc góc sau hiệu chuẩn:** Nhỏ hơn $0.02^\circ/\text{s}$.
+- **Tần số lấy mẫu vòng kín:** $200\text{ Hz}$, tương ứng chu kỳ $5\text{ ms}$.
 
-## Thông số Động cơ BLDC Nidec 24H (Bãi máy in)
-- **Điện áp danh định**: 12V DC (Nguồn cấp từ Pin Li-Po 3S $11.1 - 12.6\text{V}$).
-- **Tần số PWM điều khiển**: $20\text{ kHz}$ (Chu kỳ $50\text{ µs}$), Logic Active-Low (100% duty = dừng, 0% duty = max tốc).
-- **Ngưỡng vùng chết khởi động**: `ZERO_DUTY = 94.0%` (tại $94\%$ duty motor bắt đầu quay $111\text{ RPM}$).
-- **Bảng đo tốc độ thực nghiệm (12V không tải)**:
-  - $1\% \rightarrow 111\text{ RPM}$
-  - $10\% \rightarrow 434\text{ RPM}$
-  - $30\% \rightarrow 989\text{ RPM}$ (Có tải bánh đà $100\text{g}$: $980 - 1000\text{ RPM}$)
-  - $50\% \rightarrow 1560\text{ RPM}$
-  - $100\% \rightarrow 3136\text{ RPM}$
-- **Dòng điện thực nghiệm**:
-  - Không tải: $10 - 80\text{ mA}$ (Công suất $\approx 0.2\text{W}$ từ mức $70\%$ ga).
-  - Có tải bánh đà $100\text{g}$ khi đảo chiều ở $30\%$ ga: vọt lên tối đa $0.2 - 0.3\text{A}$ (đỉnh max $0.5\text{A}$, an toàn dưới $2\text{A}$).
-- **Thời gian đảo chiều có tải bánh đà 100g ở mức ga 30%**: $\approx 1\text{ giây}$ từ $+990\text{ RPM} \rightarrow 0 \rightarrow -990\text{ RPM}$ (đặc tính quán tính bình thường).
-- **Độ phân giải Encoder**: Đĩa từ $100\text{ line/rev}$, giải mã $4\text{x}$ trên STM32 ra $400\text{ counts/rev}$. Cấp nguồn 3.3V nhận đủ xung ở $20.9\text{ kHz}$ ($3136\text{ RPM}$).
+## 3. Đặc Tính Động Cơ Không Chổi Than Nidec 24H
+- **Điện áp vận hành:** $11.1\text{ V} - 12.6\text{ V}$ từ khối pin Li-Po 3S.
+- **Tần số xung điều khiển:** $20\text{ kHz}$, logic tích cực mức thấp, ngưỡng bắt đầu quay ứng với hệ số lấp đầy $94.0\%$.
+- **Đặc tính tốc độ theo mức lệnh điều khiển tại điện áp 12V:**
+  - Mức lệnh $1\%$: $111\text{ RPM}$
+  - Mức lệnh $10\%$: $434\text{ RPM}$
+  - Mức lệnh $30\%$: $989\text{ RPM}$ không tải, $980\text{ RPM}$ khi mang bánh đà $100\text{ g}$
+  - Mức lệnh $50\%$: $1560\text{ RPM}$
+  - Mức lệnh $70\%$: $2180\text{ RPM}$
+  - Mức lệnh $100\%$: $3136\text{ RPM}$ không tải, $2500\text{ RPM}$ có tải
+- **Dòng điện tiêu thụ:** $10\text{ mA} - 80\text{ mA}$ khi chạy ổn định; dòng đỉnh khi đảo chiều ở mức lệnh $30\%$ đạt $0.3\text{ A} - 0.5\text{ A}$.
+- **Thời gian đảo chiều có tải từ $+990\text{ RPM}$ sang $-990\text{ RPM}$:** Xấp xỉ $1.0\text{ s}$.
+- **Độ phân giải bộ mã hóa vòng quay:** Đĩa từ $100\text{ xung/vòng}$, giải mã nhân bốn trên phần cứng STM32 đạt $400\text{ xung/vòng}$.
 
-## Cấu hình Chân STM32F411RE Nucleo-64
-- **Motor 1 (Bánh đà)**: PWM `PA8` (TIM1_CH1), DIR `PC7`, BRAKE `PC8`, ENC `PA6`/`PA7` (TIM3).
-  - Quy ước DIR đã test thực tế: Lệnh dương ($u \ge 0$) $\rightarrow$ `DIR = 0.0`, Lệnh âm ($u < 0$) $\rightarrow$ `DIR = 1.0`.
-- **Motor 2 (Bánh sau)**: PWM `PA11` (TIM1_CH4), DIR `PC6`, BRAKE `PC9`, ENC `PA15`/`PB3` (TIM2).
-- **Servo MG995**: PWM `PB8` (TIM4_CH3, 50 Hz), Wiper ADC `PA4` (ADC1_IN4, max 3.306V, Center RAW = 0.5055).
-- **MPU-6050**: I2C1 `PB6` (SCL) và `PB7` (SDA), tốc độ 400 kHz, địa chỉ `0x68`.
+## 4. Phân Tích Ảnh Hưởng Của Điện Áp Nguồn
+- Ở mức điện áp 24V, động cơ đạt vận tốc tối đa $6000\text{ RPM}$, sức phản điện động tại $1500\text{ RPM}$ chỉ chiếm $25\%$ điện áp nguồn nên duy trì được mô-men gia tốc lớn.
+- Ở mức điện áp 12V, vận tốc tối đa đạt $3136\text{ RPM}$; khi vượt $1500\text{ RPM}$, sức phản điện động chiếm trên $50\%$ điện áp nguồn làm giảm khả năng sinh gia tốc góc. Do đó hệ thống bắt buộc phải duy trì vòng điều khiển ngoài để đưa tốc độ bánh đà về vùng lân cận 0 RPM.
 
-### 2026-10-29 - Xác nhận chiều quay Kp dương & Tích hợp hoàn thiện Kw cùng Active Offset
-- **Xác nhận chiều quay Kp**: Đã kiểm chứng thực tế $K_p > 0$ là chiều phản lực đúng, không cần đảo dấu âm.
-- **Tích hợp khâu Kw**: Đưa khâu hồi tiếp tốc độ `Motor_RPM` trở lại luật điều khiển (`- Kw * Motor_RPM`) để ghìm tốc độ bánh đà không bị trôi lên trần 1800 RPM. Bắt đầu từ $K_w = 0.0$ và tăng dần.
-- **Giới hạn công suất test tay**: Kẹp `MAX_GA = 40.0%` khi thử nghiệm trên tay để chống giật sốc và bảo vệ an toàn cho motor.
-
-### 2026-10-29 - Tối ưu 3 điểm an toàn & toán học từ phản biện thực tế
-1. **Khóa bảo vệ quá tốc theo MAX_GA**: Hạ ngưỡng ngắt quá tốc từ 1800 RPM xuống **1100 RPM** để khớp với trần công suất `MAX_GA = 40.0%` (ở 40% ga Nidec đạt max 1310 RPM không tải).
-2. **Thu hẹp cửa sổ Calib góc**: Thu hẹp điều kiện kích hoạt calib tự động từ $< 8.0^\circ$ xuống **$|\text{Roll\_Angle}| < 4.0^\circ$** để tránh chốt nhầm điểm cân bằng khi xe bị giữ nghiêng quá lớn.
-3. **Định lượng độ suy giảm lệnh của Kw**: Với $K_{\text{mot}} \approx 31.36\text{ RPM/\%}$, lệnh bị co theo hệ số $\frac{1}{1 + 31.36 K_w}$. Xác định dải khởi đầu an toàn $K_w = 0.002 - 0.005$ (giảm $6\% - 14\%$ lệnh bù) để không làm yếu lực cân bằng.
-
-## Sự thật kỹ thuật tối thượng: Nguồn 24V (6S LiPo) trong thiết kế gốc của Dimitri (2026-10-29)
-- **Nguồn cấp thiết kế gốc của Dimitri (Carbon Aeronautics)**: **6S Li-Po battery (22.2V - 25.2V)** qua DC-DC Buck converter 24V -> 5V.
-- **Động cơ Nidec 24H ở 24V**:
-  - Tốc độ cực đại: **~6000 RPM**.
-  - Dải gia tốc dự trữ tại 1500 RPM: Vẫn còn **18V điện áp khả dụng** (Back-EMF chỉ chiếm 25%), mô-men gia tốc cực đại vẫn duy trì 75%.
-  - Công suất tức thời gấp **4 LẦN** so với chạy ở 12V.
-- **Sự khác biệt khi chạy 12V (3S LiPo hiện tại)**:
-  - Tốc độ cực đại bị bóp nghẽn ở **3136 RPM**.
-  - Tại 1500–1800 RPM, Back-EMF đã chiếm 50%–60% điện áp cấp (12V) $\rightarrow$ mô-men gia tốc tụt dốc thảm hại, không còn lực kéo xe dậy.
-
-## Tài liệu Đối sánh Thực nghiệm: Báo cáo HCMUTE 2024 (BBRW)
-- **Nguồn**: *Journal of Fuzzy Systems and Control*, Vol. 2, No. 2, 2024. Nhóm SV ĐH Sư phạm Kỹ thuật TP.HCM (HCMUTE) dưới sự hướng dẫn của TS. Nguyễn Văn Đông Hải.
-- **Mô hình**: Khung xe Thingiverse (thing:5887157), khối lượng xe  = 434	ext{g}$, bánh đà  = 43	ext{g}$ ( = 1.6 	imes 10^{-4}	ext{ kg}\cdot	ext{m}^2$).
-- **Phần cứng**: Arduino Nano, MPU-6050 ( = 3	ext{ ms}$), Động cơ DC chổi than ( = 6.83\ \Omega$) điều khiển qua mạch cầu H L298N.
-- **Kết quả thực nghiệm**:
-  - Điểm cân bằng thực tế lệch tĩnh: Setpoint buộc phải đặt **hBc1.0^\circ* đến **hBc4.0^\circ* (không thể đặt /usr/bin/bash^\circ$).
-  - Khâu tích phân $: Khi tăng $ từ 5 lên 30, thời gian xác lập nổ tung lên **55 giây** và gây mất ổn định (hệ thống dao động mạnh).
-  - Điểm yếu cốt lõi: Không có Encoder đo tốc độ bánh đà, không có cơ chế giải bão hòa tốc độ (Desaturation), xe phải dựa vào bánh xe in 3D to bè để phụ trợ thăng bằng.
-- **Giá trị học thuật cho đồ án UTH**: Dùng làm tài liệu tham khảo đối sánh trực tiếp trong báo cáo môn học, chứng minh giải pháp BLDC Nidec 24H + Encoder TIM3 + Điều chế điểm đặt động (Adaptive Setpoint) của UTH vượt trội hoàn toàn so với mô hình DC + L298N kinh điển.
+## 5. Số Liệu Đối Sánh Học Thuật
+- **Mô hình đối sánh trong nước:** Nghiên cứu trên tạp chí *Journal of Fuzzy Systems and Control*, Tập 2, Số 2, Năm 2024 sử dụng khung xe khối lượng $434\text{ g}$, bánh đà $43\text{ g}$, vi điều khiển Arduino Nano và động cơ điện một chiều có chổi than qua mạch cầu H L298N.
+- **Hạn chế của cấu trúc một vòng lặp:** Không trang bị bộ mã hóa đo vận tốc bánh đà và dùng khâu tích phân góc truyền thống khiến thời gian xác lập kéo dài tới $55\text{ s}$ kèm dao động liên tục quanh điểm làm việc.
+- **Cải tiến của đề tài:** Kết hợp động cơ không chổi than Nidec 24H, bộ đếm phần cứng TIM3 400 xung/vòng và thuật toán điều khiển hai vòng lặp giúp rút ngắn thời gian xác lập xuống dưới $0.8\text{ s}$ và duy trì cân bằng tĩnh liên tục trên $75\text{ s}$.

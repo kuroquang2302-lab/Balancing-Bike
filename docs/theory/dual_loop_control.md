@@ -1,21 +1,29 @@
-# Lý thuyết Điều khiển Cân bằng Bánh đà Phản lực 2 Vòng
+# Cơ Sở Lý Thuyết Điều Khiển Cân Bằng Hai Vòng Lặp
 
-## 1. Động học Bánh đà Con lắc ngược (Inverted Pendulum with Reaction Wheel)
+## 1. Mô Hình Động Học Con Lắc Ngược Bánh Đà
 
-Phương trình vi phân chuyển động quanh trục Roll:
-$$I_{bike} \ddot{\theta} = m g h \sin(\theta - \theta_{CM}) - \tau_{motor}$$
+Phương trình vi phân mô tả chuyển động góc nghiêng của thân xe quanh trục tiếp đất:
 
-Trong đó phản lực cân bằng chỉ xuất hiện khi bánh đà gia tốc:
-$$\tau_{motor} = I_{wheel} \dot{\omega}_{wheel}$$
+$$I_{\text{bike}} \ddot{\theta} = m g h \sin(\theta - \theta_{\text{CM}}) - \tau_{\text{motor}}$$
 
-## 2. Nghịch lý Bão hòa Tốc độ và Sai lầm của Khâu Ki truyền thống
-- Nếu góc cân bằng lệch tĩnh $\theta_{bias} \neq 0$, trọng lực tạo mô-men kéo liên tục $\tau_g = mgh \sin(\theta_{bias}) = \text{const} \neq 0$.
-- Để triệt tiêu mô-men này, bánh đà phải tăng tốc liên tục $\dot{\omega} = \text{const}$, dẫn đến vận tốc trôi tuyến tính đến trần bão hòa (3000 RPM) và ngã xe.
-- Thử nghiệm của ĐH Sư phạm Kỹ thuật TP.HCM (HCMUTE 2024) chứng minh việc đưa $K_i$ góc truyền thống làm tăng thời gian xác lập lên **55 giây** và gây mất ổn định nghiêm trọng.
+Mô-men phản lực từ bánh đà chỉ xuất hiện khi có sự biến thiên vận tốc góc của bánh đà:
 
-## 3. Kiến trúc 2 Vòng Lặp Phân tầng (Dual-Loop Architecture)
-- **Vòng trong (Inner PD Loop):** Dập tắt dao động tức thời:
-  $$u = - (K_p \cdot e + K_d \cdot \dot{\theta})$$
-- **Vòng ngoài (Outer Adaptive Setpoint Loop):** Tự động dịch nhẹ `Active_Offset` về đúng tâm trọng lực dựa trên vận tốc bánh đà:
-  $$\dot{s} = - K_{trim} \cdot \frac{\text{Motor\_RPM}}{1000}$$
-  Khi thân xe hơi nghiêng đúng vào góc cân bằng trọng lực thực tế, **trọng lực tự đỡ lấy xe**, mô-men motor yêu cầu giảm về $0\text{ N}\cdot\text{m}$, bánh đà tự động hãm về **0 RPM**.
+$$\tau_{\text{motor}} = I_{\text{wheel}} \dot{\omega}_{\text{wheel}}$$
+
+## 2. Hiện Tượng Bão Hòa Vận Tốc Và Hạn Chế Của Khâu Tích Phân Góc
+
+- Khi điểm đặt góc nghiêng lệch một lượng $\theta_{\text{bias}} \neq 0$ so với vị trí khối tâm thực tế, trọng lực sinh ra mô-men gây lật không đổi $\tau_g = m g h \sin(\theta_{\text{bias}})$.
+- Để duy trì trạng thái cân bằng tại góc lệch này, động cơ buộc phải gia tốc liên tục với $\dot{\omega}_{\text{wheel}}$ khác không, làm vận tốc bánh đà tăng tuyến tính cho đến khi chạm giới hạn tốc độ điện áp và mất khả năng sinh mô-men phục hồi.
+- Việc sử dụng khâu tích phân góc truyền thống gây trễ pha lớn, kéo dài thời gian xác lập và tạo dao động chu kỳ biên độ lớn.
+
+## 3. Cấu Trúc Điều Khiển Hai Vòng Lặp Phân Tầng
+
+- **Vòng điều khiển trong:** Sử dụng luật tỉ lệ - vi sai kết hợp giảm chấn vận tốc bánh đà để ổn định góc nghiêng tức thời với tần số lấy mẫu 200 Hz:
+
+$$u = -K_p (\theta - \theta_{\text{offset}}) - K_d \dot{\theta} - K_w \omega_{\text{wheel}}$$
+
+- **Vòng điều khiển ngoài:** Điều chỉnh chậm điểm đặt góc cân bằng $\theta_{\text{offset}}$ dựa trên vận tốc thực tế của bánh đà đọc từ bộ đếm phần cứng TIM3:
+
+$$\dot{\theta}_{\text{offset}} = -K_{\text{trim}} \frac{\omega_{\text{wheel}}}{1000}$$
+
+Khi điểm đặt $\theta_{\text{offset}}$ hội tụ về đúng vị trí khối tâm vật lý của xe, mô-men trọng lực tự triệt tiêu và vận tốc bánh đà giảm dần về vùng lân cận 0 RPM.

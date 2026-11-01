@@ -1,18 +1,18 @@
-# Sơ đồ Chân Ngoại Vi (Pinout) STM32F411RE Nucleo-64
+# Bảng Phân Bổ Chân Ngoại Vi STM32F411RE Nucleo-64
 
-| Thiết bị Ngoại vi | Chân STM32 | Chức năng Phần cứng | Thông số Tín hiệu |
+| Khối Chức Năng | Chân Vi Điều Khiển | Tài Nguyên Phần Cứng | Đặc Tính Tín Hiệu |
 | :--- | :--- | :--- | :--- |
-| **Motor 1 (Bánh đà)** | `PA8` | TIM1_CH1 | PWM 20 kHz Active-Low |
-| | `PC7` | GPIO Output | DIR (0 = CW, 1 = CCW) |
-| | `PC8` | GPIO Output | BRAKE (1 = Run, 0 = Brake) |
-| | `PA6` | TIM3_CH1 | Encoder Kênh A (Dây Nâu) |
-| | `PA7` | TIM3_CH2 | Encoder Kênh B (Dây Cam) |
-| **Motor 2 (Bánh sau)** | `PA11` | TIM1_CH4 | PWM 20 kHz Active-Low |
-| | `PC6` | GPIO Output | DIR |
-| | `PC9` | GPIO Output | BRAKE |
-| | `PA15` | TIM2_CH1 | Encoder Kênh A |
-| | `PB3` | TIM2_CH2 | Encoder Kênh B |
-| **Servo Lái (MG995)** | `PB8` | TIM4_CH3 | PWM 50 Hz (1.0ms - 2.0ms) |
-| | `PA4` | ADC1_IN4 | Chiết áp phản hồi góc lái |
-| **IMU MPU-6050** | `PB6` | I2C1_SCL | Tốc độ 400 kHz Fast-Mode |
-| | `PB7` | I2C1_SDA | Tốc độ 400 kHz Fast-Mode |
+| **Động cơ bánh đà** | `PA8` | `TIM1_CH1` | Điều rộng xung 20 kHz, tích cực mức thấp |
+| | `PC7` | `GPIO Output` | Chiều quay: `0` là chiều thuận, `1` là chiều nghịch |
+| | `PC8` | `GPIO Output` | Phanh điện từ: `1` là nhả phanh, `0` là đóng phanh |
+| | `PA6` | `TIM3_CH1` | Kênh A bộ mã hóa vòng quay |
+| | `PA7` | `TIM3_CH2` | Kênh B bộ mã hóa vòng quay |
+| **Động cơ bánh sau** | `PA11` | `TIM1_CH4` | Điều rộng xung 20 kHz, tích cực mức thấp |
+| | `PC6` | `GPIO Output` | Điều khiển chiều quay bánh sau |
+| | `PC9` | `GPIO Output` | Điều khiển phanh bánh sau |
+| | `PA15` | `TIM2_CH1` | Kênh A bộ mã hóa vòng quay |
+| | `PB3` | `TIM2_CH2` | Kênh B bộ mã hóa vòng quay |
+| **Cơ cấu lái Servo MG995** | `PB8` | `TIM4_CH3` | Điều rộng xung 50 Hz, độ rộng từ 1.0 ms đến 2.0 ms |
+| | `PA4` | `ADC1_IN4` | Đọc điện áp chiết áp phản hồi góc lái |
+| **Cảm biến quán tính MPU-6050** | `PB6` | `I2C1_SCL` | Xung nhịp giao tiếp I2C tốc độ 400 kHz |
+| | `PB7` | `I2C1_SDA` | Đường dữ liệu giao tiếp I2C tốc độ 400 kHz |
