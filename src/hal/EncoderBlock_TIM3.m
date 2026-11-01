@@ -1,7 +1,7 @@
 classdef EncoderBlock_TIM3 < matlab.System ...
         & matlabshared.svd.BlockSampleTime ...
         & coder.ExternalDependency
-    % Khối đọc Encoder TIM3 (PA6, PA7) chuyên dụng cho Nidec 24H
+    % Khoi doc xung Encoder TIM3 tren chan PA6 va PA7 cho dong co banh da
     %#codegen
     %#ok<*EMCA>
 
@@ -12,9 +12,10 @@ classdef EncoderBlock_TIM3 < matlab.System ...
     methods
         function obj = EncoderBlock_TIM3(varargin)
             coder.allowpcode('plain');
-            setProperties(obj,nargin,varargin{:});
+            setProperties(obj, nargin, varargin{:});
         end
-        function set.SampleTime(obj,newTime)
+
+        function set.SampleTime(obj, newTime)
             coder.extrinsic('error');
             coder.extrinsic('message');
             newTime = matlabshared.svd.internal.validateSampleTime(newTime);
@@ -22,7 +23,7 @@ classdef EncoderBlock_TIM3 < matlab.System ...
         end
     end
 
-    methods (Access=protected)
+    methods (Access = protected)
         function setupImpl(~)
             if ~isempty(coder.target)
                 coder.cinclude('soc_stm_encoder_tim3.h');
@@ -30,13 +31,13 @@ classdef EncoderBlock_TIM3 < matlab.System ...
             end
         end
 
-        function [EncoderCount,IndexCount,ValidIndex] = stepImpl(~)
+        function [EncoderCount, IndexCount, ValidIndex] = stepImpl(~)
             EncoderCount = uint16(0);
-            IndexCount = uint16(0);
-            ValidIndex = uint16(0);
+            IndexCount   = uint16(0);
+            ValidIndex   = uint16(0);
             if ~isempty(coder.target)
                 EncoderCount = coder.ceval('getEncoderCount_TIM3');
-                ValidIndex = coder.ceval('getIndexCount_TIM3',coder.wref(IndexCount));
+                ValidIndex   = coder.ceval('getIndexCount_TIM3', coder.wref(IndexCount));
             end
         end
 
@@ -54,11 +55,11 @@ classdef EncoderBlock_TIM3 < matlab.System ...
             num = 3;
         end
 
-        function flag = isOutputSizeLockedImpl(~,~)
+        function flag = isOutputSizeLockedImpl(~, ~)
             flag = true;
         end
 
-        function varargout = isOutputFixedSizeImpl(~,~)
+        function varargout = isOutputFixedSizeImpl(~, ~)
             varargout{1} = true;
             varargout{2} = true;
             varargout{3} = true;
@@ -71,9 +72,9 @@ classdef EncoderBlock_TIM3 < matlab.System ...
         end
 
         function varargout = getOutputSizeImpl(~)
-            varargout{1} = [1,1];
-            varargout{2} = [1,1];
-            varargout{3} = [1,1];
+            varargout{1} = [1, 1];
+            varargout{2} = [1, 1];
+            varargout{3} = [1, 1];
         end
 
         function varargout = getOutputDataTypeImpl(~)
@@ -83,13 +84,11 @@ classdef EncoderBlock_TIM3 < matlab.System ...
         end
 
         function icon = getIconImpl(~)
-            icon = sprintf('STM32 Nucleo
-Encoder TIM3
-(PA6 / PA7)');
+            icon = sprintf('STM32 Nucleo\nEncoder TIM3\nPA6 / PA7');
         end
     end
 
-    methods (Static, Access=protected)
+    methods (Static, Access = protected)
         function simMode = getSimulateUsingImpl(~)
             simMode = 'Interpreted execution';
         end
@@ -115,17 +114,13 @@ Encoder TIM3
                     'SampleTime', sampleTime, 'Offset', offset);
             end
         end
-    end
 
-    methods(Static, Access=protected)
         function header = getHeaderImpl()
-            header = matlab.system.display.Header(mfilename('class'),...
+            header = matlab.system.display.Header(mfilename('class'), ...
                 'ShowSourceLink', false, ...
-                'Title','STM32 Nucleo Encoder TIM3 (PA6 / PA7)', ...
-                'Text', ['Quadrature Encoder Mode 3 tren TIM3 cho Nidec 24H.' newline ...
-                '- PA_6 = Encoder A (Day Nau)' newline ...
-                '- PA_7 = Encoder B (Day Cam)' newline ...
-                '- Da tach biet hoan toan khoi PA_4 (ADC Servo) va PA_8 (PWM).']);
+                'Title', 'STM32 Nucleo Encoder TIM3', ...
+                'Text', ['Bo dem xung Encoder che do 4x tren ngoai vi TIM3.' newline ...
+                'Chan ket noi: PA6 - Kenh A, PA7 - Kenh B.']);
         end
     end
 
@@ -140,10 +135,10 @@ Encoder TIM3
 
         function updateBuildInfo(buildInfo, context)
             if context.isCodeGenTarget('rtw')
-                srcDir = fullfile(fileparts(mfilename('fullpath')),'src');
-                includeDir = fullfile(fileparts(mfilename('fullpath')),'include');
-                addIncludePaths(buildInfo,includeDir);
-                addSourceFiles(buildInfo,'soc_stm_encoder_tim3.cpp',srcDir);
+                srcDir     = fullfile(fileparts(mfilename('fullpath')), 'src');
+                includeDir = fullfile(fileparts(mfilename('fullpath')), 'include');
+                addIncludePaths(buildInfo, includeDir);
+                addSourceFiles(buildInfo, 'soc_stm_encoder_tim3.cpp', srcDir);
             end
         end
     end
