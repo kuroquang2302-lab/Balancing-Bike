@@ -23,8 +23,6 @@ Dự án nghiên cứu và phát triển hệ thống xe đạp hai bánh tự c
 ```text
 Balancing-Bike/
 ├── README.md                              # Tài liệu tổng quan dự án
-├── AI_INSTRUCTIONS.md                     # Quy chuẩn quản lý tri thức dự án
-├── .gitignore                             # Cấu hình loại trừ tệp biên dịch tạm
 ├── docs/
 │   ├── project_notes/
 │   │   ├── bugs.md                        # Nhật ký lỗi kỹ thuật và biện pháp khắc phục
@@ -48,18 +46,7 @@ Balancing-Bike/
 │       ├── Setup_Encoder_TIM2.m           # Kịch bản khởi tạo mã nguồn ngoại vi TIM2
 │       ├── include/soc_stm_encoder_tim3.h # Tệp tiêu đề giao tiếp thanh ghi TIM3
 │       └── src/soc_stm_encoder_tim3.cpp   # Tệp thực thi cấu hình thanh ghi TIM3
-└── scripts/
-    └── push_to_github.sh                  # Kịch bản đồng bộ mã nguồn lên GitHub
 ```
 
 ---
 
-## Đồng Bộ Mã Nguồn Lên Kho Lưu Trữ
-
-Chạy các lệnh sau tại thư mục gốc của dự án để cập nhật mã nguồn lên nhánh chính:
-
-```bash
-git add .
-git commit -m "feat: update dual-loop controller and adaptive Kalman filter"
-git push origin main
-```
