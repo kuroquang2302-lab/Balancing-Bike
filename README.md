@@ -3,8 +3,7 @@
 [![MATLAB Simulink](https://img.shields.io/badge/MATLAB-Simulink-orange.svg)](https://www.mathworks.com/)
 [![Target MCU](https://img.shields.io/badge/STM32-F411RE%20Nucleo--64-blue.svg)](https://www.st.com/)
 [![Actuator](https://img.shields.io/badge/BLDC-Nidec%2024H%2012V-green.svg)]()
-[![Status](https://img.shields.io/badge/Trang%20Thai-Da%20Kiem%20Chung%2075s-brightgreen.svg)]()
-[![University](https://img.shields.io/badge/Truong-UTH%20TP.HCM-red.svg)](https://ut.edu.vn/)
+
 
 Dự án nghiên cứu và phát triển hệ thống xe đạp hai bánh tự cân bằng kết hợp giữa cơ cấu bánh đà phản lực cho trạng thái đứng yên tại chỗ và cơ cấu bẻ lái trợ lực cho trạng thái di chuyển tiến. Toàn bộ thuật toán xử lý tín hiệu và điều khiển vòng kín được thiết kế theo phương pháp dựa trên mô hình trên nền tảng MATLAB/Simulink và triển khai trực tiếp trên vi điều khiển STM32F411RE Nucleo-64.
 
