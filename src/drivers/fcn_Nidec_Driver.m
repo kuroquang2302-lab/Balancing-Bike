@@ -3,7 +3,6 @@ function [PWM_Duty_PA8, Dir_PC7, Brake_PC8] = fcn_Nidec_Driver(Enable_Run, Speed
 % =========================================================================
 % KHOI DIEU KHIEN DONG CO KHONG CHOI THAN NIDEC 24H
 % Chan tin hieu : PA8 - Xung PWM 20 kHz, PC7 - Chieu quay, PC8 - Phanh dien tu
-% Nguong khoi dong : ZERO_DUTY = 94.5 phan tram cho banh da tinh gon 73.3 g
 % =========================================================================
 
 persistent prev_dir stop_cnt

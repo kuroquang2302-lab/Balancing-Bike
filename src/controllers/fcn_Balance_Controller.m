@@ -2,11 +2,9 @@ function [Speed_Cmd, Enable_Out, Active_Offset] = fcn_Balance_Controller( ...
     Roll_Angle, Gyro_X_Rate, Motor_RPM, Enable_Switch, Kp, Kd, K_trim)
 %#codegen
 % =========================================================================
-% BO DIEU KHIEN CAN BANG XE DAP LAI HOP BON TANG
-% Tang 1 : Bu truoc mo-men trong luc theo goc nghieng thuc te
-% Tang 2 : Dieu khien ti le - tich phan - vi sai goc nghieng va giam chan
-% Tang 3 : Gioi han toc do bien thien lenh va gioi han mem qua toc
-% Tang 4 : Dieu chinh diem dat dong khu bao hoa van toc banh da
+% KHOI DIEU KHIEN CAN BANG XE DAP HAI VONG LAP
+% Vong trong : Bu trong luc ket hop dieu khien PID goc nghieng va giam chan
+% Vong ngoai : Dieu chinh diem dat dong khu bao hoa van toc banh da
 % =========================================================================
 
 persistent current_offset saved_offset calib_sum calib_cnt is_calibrated fault_latched int_err prev_cmd
@@ -40,7 +38,7 @@ dt             = 0.005;
 Speed_Cmd  = 0.0;
 Enable_Out = 0.0;
 
-% 1. Cho bo loc cam bien hoan tat hieu chuan do lech tinh
+% 1. Cho bo loc Kalman hoan tat uoc luong do troi tinh Gyro
 if abs(Gyro_X_Rate) > 500.0
     Active_Offset = saved_offset;
     prev_cmd      = 0.0;
@@ -73,7 +71,7 @@ if Enable_Switch < 0.5 || ~is_calibrated
     return;
 end
 
-% 3. Kiem tra sai so goc nghieng va khoa an toan khi xe nga
+% 3. Kiem tra gioi han goc nghieng va khoa an toan khi xe nga
 err = Roll_Angle - current_offset;
 
 if fault_latched
@@ -111,7 +109,7 @@ if abs(err) > ANGLE_CUTOFF
     return;
 end
 
-% 4. Tang 1 va Tang 2: Bu truoc trong luc ket hop dieu khien PID vong trong
+% 4. Vong trong: Bu truoc trong luc va dieu khien PID goc nghieng
 Enable_Out = 1.0;
 
 if abs(err) < 0.15
@@ -132,13 +130,13 @@ u_grav  = -Kg_grav * sind(err);
 u_pid   = -Kp * err - Ki_eff * int_err - Kd * Gyro_X_Rate - Kw_damp * Motor_RPM;
 u_total = max(min(u_grav + u_pid, MAX_GA), -MAX_GA);
 
-% 5. Tang 3: Gioi han toc do bien thien lenh dieu khien trong moi chu ky
+% 5. Gioi han do doc bien thien lenh dieu khien
 delta_u  = u_total - prev_cmd;
 delta_u  = max(min(delta_u, MAX_SLEW), -MAX_SLEW);
 cmd_raw  = prev_cmd + delta_u;
 prev_cmd = cmd_raw;
 
-% 6. Tang 4: Vong ngoai dieu chinh diem dat dong khu bao hoa toc do banh da
+% 6. Vong ngoai: Dich chuyen diem dat khu bao hoa van toc banh da
 if abs(err) < 3.5 && abs(Motor_RPM) > RPM_DEADBAND
     shift_rate = -K_trim * Motor_RPM / 1000.0 * dt;
     shift_rate = max(min(shift_rate, 0.003), -0.003);

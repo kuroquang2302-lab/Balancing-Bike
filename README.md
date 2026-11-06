@@ -1,37 +1,39 @@
-# Hệ Thống Xe Đạp Tự Cân Bằng Sử Dụng Bánh Đà Phản Lực Và Bẻ Lái Trợ Lực
+# Hệ Thống Xe Đạp Tự Cân Bằng Sử Dụng Bánh Đà Phản Lực Và Cơ Cấu Lái Servo
 
 [![MATLAB Simulink](https://img.shields.io/badge/MATLAB-Simulink-orange.svg)](https://www.mathworks.com/)
 [![Target MCU](https://img.shields.io/badge/STM32-F411RE%20Nucleo--64-blue.svg)](https://www.st.com/)
 [![Actuator](https://img.shields.io/badge/BLDC-Nidec%2024H%2012V-green.svg)]()
 
-
-Dự án nghiên cứu và phát triển hệ thống xe đạp hai bánh tự cân bằng kết hợp giữa cơ cấu bánh đà phản lực cho trạng thái đứng yên tại chỗ và cơ cấu bẻ lái trợ lực cho trạng thái di chuyển tiến. Toàn bộ thuật toán xử lý tín hiệu và điều khiển vòng kín được thiết kế theo phương pháp dựa trên mô hình trên nền tảng MATLAB/Simulink và triển khai trực tiếp trên vi điều khiển STM32F411RE Nucleo-64.
-
----
-
-## Điểm Nổi Bật Về Kỹ Thuật
-
-- **Kiến trúc điều khiển lai hợp bốn tầng hai vòng lặp:** Tầng thứ nhất tính toán bù trước mô-men trọng lực theo góc nghiêng thực tế; tầng thứ hai sử dụng bộ điều khiển tỉ lệ - tích phân - vi sai tốc độ cao kết hợp giảm chấn vận tốc bánh đà để sinh mô-men hồi phục góc tĩnh và ổn định thân xe tức thời; tầng thứ ba giới hạn tốc độ biến thiên lệnh và bù vùng chết khởi động tại ngưỡng 94.5%; tầng thứ tư ở vòng ngoài tự động điều chỉnh điểm đặt cân bằng nhằm khử bão hòa vận tốc bánh đà về vùng lân cận điểm không.
-- **Phân bổ độc lập các bộ định thời và ngoại vi phần cứng:** Cấu hình tách biệt TIM1 cho phát xung điều rộng xung tần số 20 kHz, TIM2 và TIM3 cho giải mã xung bộ mã hóa vòng quay chế độ nhân bốn phần cứng không tiêu tốn chu kỳ vi xử lý, TIM4 cho điều khiển góc lái Servo MG995, ADC1 cho đọc chiết áp phản hồi góc lái và USART1 cho truyền thông không dây.
-- **Thuật toán điều khiển động cơ:** Tích hợp cơ chế ngắt xung một chu kỳ khi đảo chiều quay, giới hạn mềm công suất khi tiệm cận tốc độ tối đa và quy trình phanh điện từ hai giai đoạn bảo vệ cơ khí.
-- **Bộ lọc Kalman thích nghi một chiều:** Tự động ước lượng độ lệch tĩnh của con quay hồi chuyển khi khởi động và điều chỉnh hiệp phương sai nhiễu đo theo biên độ gia tốc tổng hợp để loại bỏ nhiễu rung cơ khí.
+Hệ thống điều khiển nhúng cho mô hình xe đạp hai bánh tự cân bằng sử dụng bánh đà phản lực kết hợp cơ cấu lái Servo MG995. Toàn bộ thuật toán lọc tín hiệu, máy trạng thái hiệu chuẩn và điều khiển vòng kín được thiết kế trên MATLAB/Simulink ở tần số lấy mẫu $200\text{ Hz}$ và biên dịch trực tiếp xuống vi điều khiển ARM Cortex-M4 STM32F411RE.
 
 ---
 
-## Tài Liệu Và Công Trình Thực Nghiệm Tham Khảo
+## Kiến Trúc Kỹ Thuật
 
-Đề tài kế thừa, kiểm chứng và phát triển dựa trên các công trình nghiên cứu học thuật và thực nghiệm mở quốc tế:
+- **Điều khiển cân bằng phân tầng hai vòng lặp:**
+  - **Vòng trong $200\text{ Hz}$:** Kết hợp bù trước mô-men trọng lực phi tuyến $u_{\text{grav}} = -K_g \sin(e)$, luật điều khiển PID góc nghiêng có kẹp chống bão hòa tích phân Anti-windup và giảm chấn vận tốc góc bánh đà. Tích hợp giới hạn độ dốc lệnh Slew-rate $\Delta u \le 8.0\% / 5\text{ ms}$ và suy giảm tuyến tính công suất trong dải $2500\text{ RPM} - 3000\text{ RPM}$.
+  - **Vòng ngoài:** Điều chỉnh điểm đặt góc cân bằng $\theta_{\text{offset}}$ theo phản hồi vận tốc bánh đà từ bộ đếm TIM3 nhằm khử độ lệch khối tâm tĩnh và đưa vận tốc bánh đà về vùng lân cận $0\text{ RPM}$.
+- **Giao tiếp công suất Nidec 24H:** Điều khiển xung PWM $20\text{ kHz}$ logic Active-Low, bù vùng chết khởi động tại ngưỡng Duty Cycle $94.5\%$, ngắt xung bảo vệ $1$ chu kỳ mẫu khi đảo mức logic chân chiều quay `DIR` và đóng phanh điện từ `BRAKE` sau $0.5\text{ s}$ thả trôi.
+- **Lọc trạng thái cảm biến MPU-6050:** Bộ lọc Kalman 1D ước lượng góc nghiêng Roll và vận tốc góc trục X qua giao tiếp I2C $400\text{ kHz}$, tự động xác định độ trôi tĩnh Gyro trong $200$ chu kỳ đầu và điều chỉnh ma trận hiệp phương sai nhiễu đo $R$ theo biên độ gia tốc tổng hợp.
+- **Định thời ngoại vi phần cứng độc lập:**
+  - `TIM1`: Phát $2$ kênh xung PWM $20\text{ kHz}$ điều khiển động cơ bánh đà và động cơ dẫn động bánh sau.
+  - `TIM3` và `TIM2`: Giải mã phần cứng Quadrature Encoder chế độ $4\text{x}$ độ phân giải $400\text{ PPR}$.
+  - `TIM4` và `ADC1_IN4`: Phát xung PWM $50\text{ Hz}$ điều khiển Servo MG995 và đọc điện áp chiết áp phản hồi góc lái.
 
-| Tác Giả Và Nguồn Công Bố | Liên Kết Tài Liệu Và Mã Nguồn | Giá Trị Khoa Học Và Kỹ Thuật Kế Thừa |
+---
+
+## Công Trình Và Tài Liệu Tham Khảo
+
+| Tác Giả / Nguồn | Tài Liệu / Mã Nguồn | Nội Dung Kỹ Thuật Đối Chiếu |
 | :--- | :--- | :--- |
-| **Tom Stanton** | [Can Reaction Wheels control a Drone?](https://youtu.be/4kfBEaTncjI) | Phân tích vật lý cơ cấu bánh đà phản lực, hiện tượng bão hòa vận tốc góc và yêu cầu đáp ứng gia tốc nhanh khi điều khiển tư thế. |
-| **Every Flavor of Robot** | [Reaction Cube Situation Is Crazy](https://youtu.be/OeoIK913tRk) | Chứng minh sự khác biệt giữa điều khiển mô-men xoắn trực tiếp và điều khiển vận tốc; đề xuất cơ chế dịch chuyển điểm đặt vòng ngoài để khử bão hòa tốc độ động cơ. |
-| **James Bruton** | [What is the Difference Between Reaction Wheels and Gyroscopes?](https://youtu.be/pJfMFUcquWM) | Phân biệt nguyên lý bánh đà phản lực và con quay hồi chuyển điều khiển mô-men; chứng minh trên bộ truyền động điều khiển vận tốc, thành phần tích phân sai số góc đóng vai trò sinh mô-men phục hồi tĩnh. |
-| **Sydney Madueke** | [Building a SELF-BALANCING reaction wheel](https://youtu.be/Cegxa2BuCUc) | Thực nghiệm tối ưu hóa tỉ số mô-men quán tính bằng cách thu gọn khối lượng bánh đà và khung cơ khí, kết hợp thành phần tích phân để triệt tiêu độ lệch góc xác lập. |
-| **RemRC** | [Self-Balancing-Bike](https://github.com/remrc/Self-Balancing-Bike), [3-Reaction-Wheels](https://github.com/remrc/3-Reaction-Wheels-Self-Balancing) và [Thingiverse 5887157](https://www.thingiverse.com/thing:5887157) | Thiết kế mẫu cơ khí xe đạp in 3D nguyên bản sử dụng động cơ Nidec 24H, làm cơ sở để đề tài kế thừa kết cấu khung và nâng cấp lên kiến trúc điều khiển hai vòng lặp trên STM32F411RE. |
-| **BD594 James Cochrane** | [Build Your Own - 1D Wannabe Cubli Reaction Wheel](https://www.youtube.com/watch?v=vqV6nazapFQ) và [Kho mã nguồn](https://github.com/squirtifier/DIY---1D-Wannabe-Cubli-Reaction-Wheel) | Thiết kế mạch bảo vệ xung điện áp ngược và cấu hình điện trở kéo lên 10 kΩ cho ngõ ra cực máng hở của bộ mã hóa vòng quay trên động cơ Nidec 24H. |
-| **Dmitrii Tomin** | [Printables 956136](https://www.printables.com/model/956136-3d-printed-self-balancing-bike) và [Kho mã nguồn](https://github.com/Dmitrii-Tomin/self-balancing_bike) | Quy trình lắp ghép cơ khí chuẩn hóa 23 bước và thông số in 3D thực nghiệm cho toàn bộ chi tiết khung xe. |
-| **Tạp chí Journal of Fuzzy Systems and Control Năm 2024** | Bài báo *PID Control for Balancing Bike Model using Reaction Wheel*, Tập 2, Số 2, DOI: `10.59247/jfsc.v2i2.188` | Công trình đối sánh trong nước sử dụng động cơ điện một chiều có chổi than và bộ điều khiển một vòng lặp với thời gian xác lập 55 giây, làm cơ sở đối chứng hiệu quả vượt trội của kiến trúc hai vòng lặp trong đề tài. |
+| **Tom Stanton** | [Can Reaction Wheels control a Drone?](https://youtu.be/4kfBEaTncjI) | Động lực học bánh đà phản lực, giới hạn bão hòa vận tốc góc và yêu cầu điều khiển vòng kín qua vùng $0\text{ RPM}$. |
+| **Every Flavor of Robot** | [Reaction Cube Situation Is Crazy](https://youtu.be/OeoIK913tRk) | Phân tích điều khiển mô-men FOC và thuật toán dịch chuyển điểm đặt vòng ngoài để giải bão hòa tốc độ bánh đà. |
+| **James Bruton** | [What is the Difference Between Reaction Wheels and Gyroscopes?](https://youtu.be/pJfMFUcquWM) | Đặc tính đạo hàm vận tốc trên bộ truyền động Velocity Mode; vai trò của thành phần tích phân góc $K_i$ trong việc sinh mô-men phục hồi tĩnh. |
+| **Sydney Madueke** | [Building a SELF-BALANCING reaction wheel](https://youtu.be/Cegxa2BuCUc) | Tối ưu tỉ số mô-men quán tính giữa bánh đà với khung cơ khí và khử sai số góc xác lập bằng khâu tích phân. |
+| **RemRC** | [Self-Balancing-Bike](https://github.com/remrc/Self-Balancing-Bike), [3-Reaction-Wheels](https://github.com/remrc/3-Reaction-Wheels-Self-Balancing) và [Thingiverse 5887157](https://www.thingiverse.com/thing:5887157) | Thiết kế cơ khí gốc sử dụng động cơ Nidec 24H và luật điều khiển phản hồi trạng thái trên Arduino Nano. |
+| **BD594 James Cochrane** | [Build Your Own - 1D Wannabe Cubli Reaction Wheel](https://www.youtube.com/watch?v=vqV6nazapFQ) và [DIY 1D Wannabe Cubli](https://github.com/squirtifier/DIY---1D-Wannabe-Cubli-Reaction-Wheel) | Mạch bảo vệ xung áp ngược và cấu hình điện trở kéo lên $10\text{ k}\Omega$ cho ngõ ra Encoder cực máng hở của Nidec 24H. |
+| **Dmitrii Tomin** | [Printables 956136](https://www.printables.com/model/956136-3d-printed-self-balancing-bike) và [self-balancing_bike](https://github.com/Dmitrii-Tomin/self-balancing_bike) | Quy trình lắp ráp cơ khí $23$ bước và cấu hình in 3D cho khung xe. |
+| **Journal of Fuzzy Systems and Control 2024** | *PID Control for Balancing Bike Model using Reaction Wheel*, Vol. 2, No. 2, DOI: `10.59247/jfsc.v2i2.188` | Mô hình đối sánh dùng động cơ DC + L298N và bộ điều khiển PID một vòng lặp không có phản hồi tốc độ bánh đà. |
 
 ---
 
@@ -39,35 +41,30 @@ Dự án nghiên cứu và phát triển hệ thống xe đạp hai bánh tự c
 
 ```text
 Balancing-Bike/
-├── README.md                              # Tài liệu tổng quan dự án
-├── AI_INSTRUCTIONS.md                     # Quy chuẩn quản lý tri thức và mã nguồn dự án
-├── .gitignore                             # Cấu hình loại trừ tệp biên dịch tạm
+├── README.md                              # Tổng quan kiến trúc hệ thống
+├── .gitignore                             # Loại trừ tệp sinh tự động của Simulink Coder
 ├── docs/
-│   ├── references.md                      # Phân tích chi tiết các công trình tham khảo
-│   ├── project_notes/
-│   │   ├── bugs.md                        # Nhật ký lỗi kỹ thuật và biện pháp khắc phục
-│   │   ├── decisions.md                   # Hồ sơ quyết định thiết kế kiến trúc
-│   │   ├── key_facts.md                   # Thông số vật lý và dữ liệu thực nghiệm
-│   │   └── issues.md                      # Nhật ký tiến độ triển khai
+│   ├── references.md                      # Phân tích kỹ thuật các công trình tham khảo
 │   ├── hardware/
-│   │   └── pinouts.md                     # Sơ đồ phân bổ chân vi điều khiển STM32F411RE
-│   └── theory/
-│       └── dual_loop_control.md           # Cơ sở lý thuyết động học và điều khiển lai hợp
-├── src/
-│   ├── controllers/
-│   │   └── fcn_Balance_Controller.m       # Khối điều khiển cân bằng lai hợp bốn tầng
-│   ├── drivers/
-│   │   └── fcn_Nidec_Driver.m             # Khối điều khiển công suất và phanh động cơ Nidec 24H
-│   ├── filters/
-│   │   └── fcn_MPU6050_Filter.m           # Khối lọc Kalman thích nghi cho cảm biến MPU-6050
-│   └── hal/
-│       ├── EncoderBlock_TIM3.m            # Khối giao tiếp phần cứng đọc Encoder TIM3
-│       ├── Setup_Encoder_TIM3.m           # Kịch bản khởi tạo mã nguồn ngoại vi TIM3
-│       ├── Setup_Encoder_TIM2.m           # Kịch bản khởi tạo mã nguồn ngoại vi TIM2
-│       ├── include/soc_stm_encoder_tim3.h # Tệp tiêu đề giao tiếp thanh ghi TIM3
-│       └── src/soc_stm_encoder_tim3.cpp   # Tệp thực thi cấu hình thanh ghi TIM3
-    
+│   │   └── pinouts.md                     # Sơ đồ chân ngoại vi STM32F411RE và phân phối nguồn
+│   ├── theory/
+│   │   └── dual_loop_control.md           # Mô hình toán học và cấu trúc điều khiển hai vòng lặp
+│   └── project_notes/
+│       ├── decisions.md                   # Hồ sơ quyết định thiết kế kiến trúc
+│       ├── key_facts.md                   # Thông số vật lý và đặc tính thực nghiệm phần cứng
+│       ├── bugs.md                        # Nhật ký lỗi kỹ thuật và giải pháp xử lý
+│       └── issues.md                      # Tiến độ phát triển các phân hệ
+└── src/
+    ├── controllers/
+    │   └── fcn_Balance_Controller.m       # Khối điều khiển cân bằng hai vòng lặp
+    ├── drivers/
+    │   └── fcn_Nidec_Driver.m             # Khối giao tiếp PWM 20 kHz, chiều quay và phanh Nidec 24H
+    ├── filters/
+    │   └── fcn_MPU6050_Filter.m           # Khối lọc Kalman 1D thích nghi cho MPU-6050
+    └── hal/
+        ├── EncoderBlock_TIM3.m            # System Object đọc bộ đếm phần cứng TIM3
+        ├── Setup_Encoder_TIM3.m           # Kịch bản khởi tạo mã nguồn C/C++ cho TIM3
+        ├── Setup_Encoder_TIM2.m           # Kịch bản khởi tạo mã nguồn C/C++ cho TIM2
+        ├── include/soc_stm_encoder_tim3.h # Khai báo nguyên mẫu hàm thanh ghi TIM3
+        └── src/soc_stm_encoder_tim3.cpp   # Thực thi cấu hình thanh ghi GPIOA và TIM3
 ```
-
----
-

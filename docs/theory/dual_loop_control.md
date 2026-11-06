@@ -1,42 +1,43 @@
-# Cơ Sở Lý Thuyết Điều Khiển Cân Bằng Hai Vòng Lặp Và Kiến Trúc Lai Hợp Bốn Tầng
+# Cơ Sở Lý Thuyết Động Lực Học Và Điều Khiển Hai Vòng Lặp
 
-## 1. Mô Hình Động Học Con Lắc Ngược Bánh Đà
+## 1. Phương Trình Động Lực Học Con Lắc Ngược Bánh Đà
 
-Phương trình vi phân mô tả chuyển động góc nghiêng của thân xe quanh trục tiếp đất:
+Chuyển động góc nghiêng Roll của thân xe quanh trục tiếp đất được mô tả bởi phương trình vi phân:
 
-$$I_{\text{bike}} \ddot{\theta} = m g h \sin(\theta - \theta_{\text{CM}}) - \tau_{\text{motor}}$$
+$$I_{\text{bike}} \ddot{\theta} = m g h \sin(\theta - \theta_{\text{CM}}) - \tau_{\text{wheel}}$$
 
-Mô-men phản lực từ bánh đà chỉ xuất hiện khi có sự biến thiên vận tốc góc của bánh đà:
+Mô-men phản lực từ bánh đà chỉ sinh ra khi có gia tốc góc:
 
-$$\tau_{\text{motor}} = I_{\text{wheel}} \dot{\omega}_{\text{wheel}}$$
+$$\tau_{\text{wheel}} = J_{\text{wheel}} \dot{\omega}_{\text{wheel}}$$
 
-## 2. Hiện Tượng Bão Hòa Vận Tốc Và Sự Khác Biệt Giữa Điều Khiển Mô-Men Với Điều Khiển Vận Tốc
+## 2. Đặc Tính Truyền Động Velocity Mode Của Động Cơ Nidec 24H
 
-- Khi điểm đặt góc nghiêng lệch một lượng $\theta_{\text{bias}} \neq 0$ so với vị trí khối tâm thực tế, trọng lực sinh ra mô-men gây lật không đổi $\tau_g = m g h \sin(\theta_{\text{bias}})$.
-- Để duy trì trạng thái cân bằng tại góc lệch này, động cơ buộc phải gia tốc liên tục với $\dot{\omega}_{\text{wheel}}$ khác không, làm vận tốc bánh đà tăng tuyến tính cho đến khi chạm giới hạn tốc độ điện áp và mất khả năng sinh mô-men phục hồi.
-- Đối với động cơ không chổi than Nidec 24H có mạch điều khiển vận tốc tích hợp, tín hiệu điều rộng xung quyết định vận tốc góc xác lập $\omega_{\text{wheel}} \approx K_v u$. Do đó, mô-men phản lực sinh ra tỉ lệ với đạo hàm theo thời gian của lệnh điều khiển:
+- Mạch ASIC tích hợp bên trong động cơ BLDC Nidec 24H điều khiển vận tốc góc theo tần số và độ rộng xung PWM: $\omega_{\text{wheel}} \approx K_v u$.
+- Do đó, mô-men phản lực tác dụng lên khung xe tỉ lệ với đạo hàm bậc nhất theo thời gian của lệnh điều khiển:
 
-$$\tau_{\text{motor}} \propto \frac{du}{dt}$$
+$$\tau_{\text{wheel}} = J_{\text{wheel}} K_v \frac{du}{dt}$$
 
-- Nếu chỉ sử dụng luật tỉ lệ - vi sai thuần túy $u = -K_p (\theta - \theta_{\text{offset}}) - K_d \dot{\theta}$, đạo hàm của lệnh điều khiển sẽ trở thành $\dot{u} = -K_p \dot{\theta} - K_d \ddot{\theta}$. Tại thời điểm thân xe nghiêng đến biên độ cực đại và bắt đầu đổi chiều chuyển động, vận tốc góc thân xe $\dot{\theta}$ bằng 0 làm thành phần tỉ lệ mất khả năng sinh gia tốc góc cho bánh đà.
-- Khi bổ sung thành phần tích phân sai số góc có giới hạn chống bão hòa $-K_i \int (\theta - \theta_{\text{offset}}) dt$ kết hợp bù trước trọng lực, đạo hàm của khâu tích phân sẽ tái tạo lại chính xác thành phần mô-men phục hồi tĩnh $-K_i (\theta - \theta_{\text{offset}})$, giúp động cơ tiếp tục tăng tốc mạnh mẽ để kéo thân xe trở về vị trí thẳng đứng.
+- Nếu chỉ sử dụng bộ điều khiển PD thuần túy $u = -K_p e - K_d \dot{e}$ với $e = \theta - \theta_{\text{offset}}$, đạo hàm lệnh điều khiển trở thành:
 
-## 3. Cấu Trúc Điều Khiển Lai Hợp Bốn Tầng Hai Vòng Lặp
+$$\frac{du}{dt} = -K_p \dot{e} - K_d \ddot{e}$$
 
-Hệ thống điều khiển được tổ chức thành bốn tầng chức năng phối hợp chặt chẽ ở tần số lấy mẫu 200 Hz:
+- Tại biên độ nghiêng cực đại khi thân xe bắt đầu đổi chiều chuyển động, vận tốc góc $\dot{e} = 0$ làm thành phần tỉ lệ $-K_p \dot{e}$ triệt tiêu, khiến bánh đà ngừng tăng tốc và mất mô-men phục hồi tĩnh.
+- Khi bổ sung thành phần tích phân sai số góc $-K_i \int e\,dt$ kết hợp bù trước trọng lực $-K_g \sin(e)$, đạo hàm theo thời gian của lệnh điều khiển khôi phục đầy đủ thành phần đàn hồi tĩnh tỉ lệ với góc nghiêng $-K_i e$.
 
-- **Tầng thứ nhất - Bù trước mô-men trọng lực:** Tính toán trực tiếp thành phần bù phi tuyến theo góc nghiêng thực tế nhằm gánh phần lớn mô-men gây lật của trọng trường:
+## 3. Cấu Trúc Bộ Điều Khiển Cân Bằng Phân Tầng
 
-$$u_{\text{grav}} = -K_g \sin(\theta - \theta_{\text{offset}})$$
+1. **Vòng điều khiển trong $f_s = 200\text{ Hz}$:**
+   - Tổng hợp lệnh điều khiển từ khâu bù trước trọng lực, bộ điều khiển PID góc nghiêng và giảm chấn vận tốc góc bánh đà:
 
-- **Tầng thứ hai - Điều khiển tỉ lệ - tích phân - vi sai vòng trong:** Ổn định góc nghiêng tức thời và sinh mô-men phục hồi tĩnh với cơ chế kẹp biên độ tích phân trong ngưỡng an toàn và xả nhẹ tích phân khi sai số góc nhỏ hơn $0.15^\circ$:
+$$u = -K_g \sin(e) - K_p e - K_i \int e\,dt - K_d \dot{\theta} - K_w \omega_{\text{wheel}}$$
 
-$$u_{\text{PID}} = -K_p (\theta - \theta_{\text{offset}}) - K_i \int (\theta - \theta_{\text{offset}}) dt - K_d \dot{\theta} - K_w \omega_{\text{wheel}}$$
-
-- **Tầng thứ ba - Giới hạn tốc độ biến thiên lệnh và thích nghi phần cứng:** Giới hạn độ biến thiên lệnh điều khiển tối đa $8.0\%$ trong mỗi chu kỳ $5\text{ ms}$ để loại bỏ hiện tượng giật cục bộ, kết hợp bù vùng chết khởi động tại ngưỡng hệ số lấp đầy $94.5\%$ tương ứng với bánh đà tinh gọn $73.3\text{ g}$ và suy giảm tuyến tính lệnh cùng chiều khi vận tốc vượt quá $2500\text{ RPM}$.
-
-- **Tầng thứ tư - Điều chỉnh điểm đặt cân bằng động vòng ngoài:** Điều chỉnh chậm điểm đặt góc cân bằng $\theta_{\text{offset}}$ dựa trên vận tốc thực tế của bánh đà đọc từ bộ đếm phần cứng TIM3:
+   - Trạng thái tích phân được kẹp chống bão hòa Anti-windup tại ngưỡng $\pm 25.0\%$ công suất và áp dụng hệ số suy giảm $0.995$ khi $|e| < 0.15^\circ$ để ngăn vọt lố khi qua vị trí cân bằng.
+2. **Giới hạn độ dốc lệnh và bảo vệ quá tốc:**
+   - Bộ giới hạn Slew-rate kẹp độ biến thiên lệnh tối đa $|\Delta u| \le 8.0\%$ trong mỗi chu kỳ $5\text{ ms}$.
+   - Khi lệnh điều khiển cùng dấu với vận tốc bánh đà và $|\omega_{\text{wheel}}| > 2500\text{ RPM}$, biên độ lệnh suy giảm tuyến tính về $0\%$ tại ngưỡng $3000\text{ RPM}$.
+3. **Vòng điều khiển ngoài giải bão hòa tốc độ bánh đà:**
+   - Cập nhật điểm đặt góc cân bằng $\theta_{\text{offset}}$ theo phản hồi vận tốc thực tế từ Encoder TIM3:
 
 $$\dot{\theta}_{\text{offset}} = -K_{\text{trim}} \frac{\omega_{\text{wheel}}}{1000}$$
 
-Khi điểm đặt $\theta_{\text{offset}}$ hội tụ về đúng vị trí khối tâm vật lý của xe, mô-men trọng lực tự triệt tiêu và vận tốc bánh đà giảm dần về vùng lân cận 0 RPM.
+   - Điểm đặt $\theta_{\text{offset}}$ được giới hạn trong dải $\pm 3.0^\circ$ quanh mốc hiệu chuẩn tĩnh ban đầu, hướng thân xe về đúng vị trí khối tâm vật lý để triệt tiêu vận tốc bánh đà về vùng lân cận $0\text{ RPM}$.
