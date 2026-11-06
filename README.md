@@ -13,9 +13,8 @@ Dự án nghiên cứu và phát triển hệ thống xe đạp hai bánh tự c
 
 - **Kiến trúc điều khiển lai hợp bốn tầng hai vòng lặp:** Tầng thứ nhất tính toán bù trước mô-men trọng lực theo góc nghiêng thực tế; tầng thứ hai sử dụng bộ điều khiển tỉ lệ - tích phân - vi sai tốc độ cao kết hợp giảm chấn vận tốc bánh đà để sinh mô-men hồi phục góc tĩnh và ổn định thân xe tức thời; tầng thứ ba giới hạn tốc độ biến thiên lệnh và bù vùng chết khởi động tại ngưỡng 94.5%; tầng thứ tư ở vòng ngoài tự động điều chỉnh điểm đặt cân bằng nhằm khử bão hòa vận tốc bánh đà về vùng lân cận điểm không.
 - **Phân bổ độc lập các bộ định thời và ngoại vi phần cứng:** Cấu hình tách biệt TIM1 cho phát xung điều rộng xung tần số 20 kHz, TIM2 và TIM3 cho giải mã xung bộ mã hóa vòng quay chế độ nhân bốn phần cứng không tiêu tốn chu kỳ vi xử lý, TIM4 cho điều khiển góc lái Servo MG995, ADC1 cho đọc chiết áp phản hồi góc lái và USART1 cho truyền thông không dây.
-- **Thuật toán điều khiển động cơ an toàn:** Tích hợp cơ chế ngắt xung một chu kỳ khi đảo chiều quay, giới hạn mềm công suất khi tiệm cận tốc độ tối đa và quy trình phanh điện từ hai giai đoạn bảo vệ cơ khí.
+- **Thuật toán điều khiển động cơ:** Tích hợp cơ chế ngắt xung một chu kỳ khi đảo chiều quay, giới hạn mềm công suất khi tiệm cận tốc độ tối đa và quy trình phanh điện từ hai giai đoạn bảo vệ cơ khí.
 - **Bộ lọc Kalman thích nghi một chiều:** Tự động ước lượng độ lệch tĩnh của con quay hồi chuyển khi khởi động và điều chỉnh hiệp phương sai nhiễu đo theo biên độ gia tốc tổng hợp để loại bỏ nhiễu rung cơ khí.
-- **Tối ưu hóa mô-men quán tính và khối lượng cơ khí:** Tinh giản bánh đà phản lực từ cấu hình 21 cụm ốc 100.0 g xuống cấu hình 7 cụm bu lông M4x16 và 28 đai ốc M4 bố trí đối xứng tâm đạt khối lượng 73.3 g, giúp động cơ Nidec 24H ở mức nguồn 12V tăng tốc góc nhanh hơn 35% trong khi tổng khối lượng toàn xe hoàn thiện đạt 780 g đến 820 g.
 
 ---
 
@@ -67,18 +66,8 @@ Balancing-Bike/
 │       ├── Setup_Encoder_TIM2.m           # Kịch bản khởi tạo mã nguồn ngoại vi TIM2
 │       ├── include/soc_stm_encoder_tim3.h # Tệp tiêu đề giao tiếp thanh ghi TIM3
 │       └── src/soc_stm_encoder_tim3.cpp   # Tệp thực thi cấu hình thanh ghi TIM3
-└── scripts/
-    └── push_to_github.sh                  # Kịch bản đồng bộ mã nguồn lên GitHub
+    
 ```
 
 ---
 
-## Đồng Bộ Mã Nguồn Lên Kho Lưu Trữ
-
-Chạy các lệnh sau tại thư mục gốc của dự án để cập nhật mã nguồn lên nhánh chính:
-
-```bash
-git add .
-git commit -m "feat: update four-layer hybrid controller, verified references, and mass budget"
-git push origin main
-```
