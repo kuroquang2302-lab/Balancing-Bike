@@ -1,0 +1,11 @@
+# MATLAB / Simulink
+*.asv
+*.slxc
+slprj/
+*_ert_rtw/
+*.mex*
+*.log
+
+# OS Metadata
+.DS_Store
+Thumbs.db
