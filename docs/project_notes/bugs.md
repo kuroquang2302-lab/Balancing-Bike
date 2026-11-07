@@ -44,3 +44,4 @@
 - **Hiện tượng:** Khi góc nghiêng vượt quá $2.0^\circ$ và vận tốc góc thân xe về $0^\circ/\text{s}$ tại biên độ cực đại, bánh đà ngừng tăng tốc làm xe không thể tự kéo về vị trí cân bằng.
 - **Nguyên nhân:** Với cơ cấu chấp hành nhận lệnh vận tốc như Nidec 24H, đạo hàm của luật PD thuần túy bằng $0$ khi $\dot{\theta} = 0$ và $\ddot{\theta} = 0$.
 - **Giải pháp:** Bổ sung khâu bù trước trọng lực `u_grav` và khâu tích phân sai số góc `int_err` có giới hạn Anti-windup để duy trì tốc độ biến thiên lệnh $\dot{u} \neq 0$ tại điểm đổi chiều.
+

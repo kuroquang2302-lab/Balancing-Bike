@@ -54,3 +54,4 @@
 - **Bối cảnh:** Trên động cơ điều khiển vận tốc Nidec 24H, mô-men phản lực tỉ lệ với đạo hàm lệnh điều khiển $\tau \propto \dot{u}$. Luật PD thuần túy mất khả năng sinh gia tốc góc tại điểm đổi chiều chuyển động khi $\dot{\theta} = 0$.
 - **Quyết định:** Bổ sung thành phần bù trước trọng lực $-K_g \sin(e)$, thành phần tích phân sai số góc $-K_i \int e\,dt$ có kẹp biên độ $\pm 25.0\%$ kèm hệ số xả $0.995$ khi $|e| < 0.15^\circ$, và bộ giới hạn tốc độ biến thiên lệnh $\Delta u \le 8.0\% / 5\text{ ms}$.
 - **Hệ quả:** Tái tạo mô-men phục hồi tĩnh tỉ lệ với góc nghiêng mà không gây bão hòa tích phân hay thay đổi giao diện cổng của khối Simulink.
+
