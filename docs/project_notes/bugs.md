@@ -45,3 +45,8 @@
 - **Nguyên nhân:** Với cơ cấu chấp hành nhận lệnh vận tốc như Nidec 24H, đạo hàm của luật PD thuần túy bằng $0$ khi $\dot{\theta} = 0$ và $\ddot{\theta} = 0$.
 - **Giải pháp:** Bổ sung khâu bù trước trọng lực `u_grav` và khâu tích phân sai số góc `int_err` có giới hạn Anti-windup để duy trì tốc độ biến thiên lệnh $\dot{u} \neq 0$ tại điểm đổi chiều.
 
+
+### 9. Chập tụ gốm lọc nhiễu đường khởi tạo lại trên bo mạch ESP32-C3 Super Mini
+- **Hiện tượng:** Khi cấp nguồn qua cổng USB Type-C, đèn báo nguồn vẫn sáng và điện áp đầu ra bộ ổn áp đạt đủ 3.34 V nhưng đèn trạng thái trên chân GPIO8 không hoạt động và máy tính hoàn toàn không nhận diện được thiết bị USB JTAG/Serial.
+- **Nguyên nhân:** Tụ gốm dán 100 nF mắc song song với nút nhấn RST giữa đường tín hiệu kích hoạt chip `CHIP_EN` và `GND` bị nứt chập cơ học từ quá trình gia công, kéo chân `CHIP_EN` xuống mức 0 V làm vi điều khiển bị giữ cố định ở trạng thái khởi tạo lại.
+- **Khắc phục:** Đo kiểm tra thông mạch trên đường `CHIP_EN` để xác định linh kiện chập và loại bỏ tụ lọc bị lỗi khỏi bo mạch, giúp chân `CHIP_EN` được kéo lên mức áp cao 3.3 V qua điện trở 10 kOhm và khôi phục hoàn toàn giao tiếp nạp chương trình.

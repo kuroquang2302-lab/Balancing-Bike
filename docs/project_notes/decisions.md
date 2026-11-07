@@ -55,3 +55,8 @@
 - **Quyết định:** Bổ sung thành phần bù trước trọng lực $-K_g \sin(e)$, thành phần tích phân sai số góc $-K_i \int e\,dt$ có kẹp biên độ $\pm 25.0\%$ kèm hệ số xả $0.995$ khi $|e| < 0.15^\circ$, và bộ giới hạn tốc độ biến thiên lệnh $\Delta u \le 8.0\% / 5\text{ ms}$.
 - **Hệ quả:** Tái tạo mô-men phục hồi tĩnh tỉ lệ với góc nghiêng mà không gây bão hòa tích phân hay thay đổi giao diện cổng của khối Simulink.
 
+
+### ADR-012: Tách biệt tác vụ giao tiếp BLE sang vi điều khiển đồng xử lý ESP32-C3 Super Mini
+- **Bối cảnh:** Việc xử lý trực tiếp ngăn xếp giao thức không dây hoặc phân tích chuỗi ký tự biến thiên độ dài trên vi điều khiển trung tâm tiềm ẩn nguy cơ gây trễ ngắt cho vòng lặp cân bằng 200 Hz, đồng thời hệ điều hành iOS yêu cầu chuẩn Bluetooth Low Energy (BLE 5.0) thay vì Bluetooth Classic SPP.
+- **Quyết định:** Sử dụng bo mạch kích thước nhỏ ESP32-C3 Super Mini làm bộ đồng xử lý BLE độc lập, giải mã các gói tin từ ứng dụng iOS và chuyển đổi thành khung nhị phân cố định 14 byte kèm mã kiểm tra XOR truyền qua ngoại vi USART1 (PA9/PA10) ở tần số 50 Hz.
+- **Kết quả:** Thiết bị iOS điều khiển trực tiếp hướng lái, vận tốc và tinh chỉnh nóng các hệ số bộ điều khiển mà không ảnh hưởng đến khối tâm cơ học cũng như tính tất định thời gian thực của STM32F411RE.
