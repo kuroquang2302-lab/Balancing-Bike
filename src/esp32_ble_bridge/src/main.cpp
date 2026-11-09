@@ -4,50 +4,149 @@
 #include <math.h>
 #include <string.h>
 
-// =========================================================================
-// 1. CAU HINH PHAN CUNG ESP32-C3 SUPER MINI
-// =========================================================================
-static constexpr uint8_t PIN_STATUS_LED = 8; // LED xanh duong (Active LOW)
-static constexpr uint8_t PIN_STM32_RX = 20;  // GPIO20 (RX) <- noi PA9  (USART1_TX STM32)
-static constexpr uint8_t PIN_STM32_TX = 21;  // GPIO21 (TX) -> noi PA10 (USART1_RX STM32)
+static constexpr uint8_t PIN_BUZZER = 3;
+static constexpr uint8_t PIN_STATUS_LED = 8;
+static constexpr uint8_t PIN_STM32_RX = 20;
+static constexpr uint8_t PIN_STM32_TX = 21;
 static constexpr uint32_t STM32_BAUD = 115200;
+static constexpr uint16_t BEEP_FREQ = 2700;
 
-// Nordic UART Service (NUS) UUIDs - Tuong thich Bluefruit Connect, LightBlue, nRF Connect
+static constexpr uint32_t ECO_STANDBY_MS = 60000;
+static constexpr uint32_t HIBERNATE_MS = 180000;
+static constexpr uint32_t HIB_OFF_MS = 4000;
+static constexpr uint32_t HIB_ON_MS = 1000;
+
 static const char *NUS_SERVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
 static const char *NUS_RX_CHAR_UUID = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E";
 static const char *NUS_TX_CHAR_UUID = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";
 
-// =========================================================================
-// 2. CAU TRUC TRANG THAI DIEU KHIEN & THONG SO TINH CHINH
-// =========================================================================
 struct BikeControlState
 {
-    uint8_t enable_switch; // 0: Tat can bang, 1: Bat can bang
-    int8_t drive_speed;    // -100 den +100 (%) banh sau Nidec (PA11)
-    int8_t steer_angle;    // -45 den +45 (do) Servo MG995 (PB8)
-    int8_t speed_gear;     // Muc ga mac dinh khi bam mui ten Len/Xuong (10..100%)
-    int8_t steer_step;     // Goc be lai khi bam mui ten Trai/Phai (mac dinh 25 do)
-    float kp;              // Mac dinh: 45.0 (theo bugs.md #8)
-    float kd;              // Mac dinh: 3.80 (theo bugs.md #8)
-    float k_trim;          // Mac dinh: 0.50
-    float nominal_ofs;     // Goc offset danh dinh (mac dinh: 1.30 do)
+    uint8_t enable_switch;
+    int8_t drive_speed;
+    int8_t steer_angle;
+    int8_t speed_gear;
+    int8_t steer_step;
+    float kp;
+    float kd;
+    float k_trim;
+    float nominal_ofs;
 };
 
 static portMUX_TYPE g_stateMux = portMUX_INITIALIZER_UNLOCKED;
 static BikeControlState g_bikeState = {
-    0,     // enable_switch = 0
-    0,     // drive_speed   = 0
-    0,     // steer_angle   = 0
-    30,    // speed_gear    = 30%
-    25,    // steer_step    = 25 do
-    45.0f, // kp            = 45.0
-    3.80f, // kd            = 3.80
-    0.50f, // k_trim        = 0.50
-    1.30f  // nominal_ofs   = +1.30 do
-};
+    0,
+    0,
+    0,
+    30,
+    25,
+    45.0f,
+    3.80f,
+    0.50f,
+    1.30f};
 
 static volatile bool g_bleConnected = false;
+static volatile bool g_pendingReset = false;
+static volatile bool g_forceSendFrame = false;
+static volatile uint8_t g_pendingBeepMode = 0;
+static volatile uint32_t g_lastDisconnectedMs = 0;
+static volatile bool g_offsetBeeped = false;
+static bool g_ecoMode = false;
+static bool g_hibernateMode = false;
+static bool g_advWindowOpen = true;
 static NimBLECharacteristic *g_pTxCharacteristic = nullptr;
+
+static void triggerBuzzer(uint8_t mode)
+{
+    portENTER_CRITICAL(&g_stateMux);
+    g_pendingBeepMode = mode;
+    portEXIT_CRITICAL(&g_stateMux);
+}
+
+static bool updateBuzzer()
+{
+    static uint32_t buzzerTimer = 0;
+    static uint8_t beepStep = 0;
+
+    uint8_t reqMode = 0;
+    portENTER_CRITICAL(&g_stateMux);
+    if (g_pendingBeepMode != 0)
+    {
+        reqMode = g_pendingBeepMode;
+        g_pendingBeepMode = 0;
+    }
+    portEXIT_CRITICAL(&g_stateMux);
+
+    uint32_t now = millis();
+    if (reqMode != 0)
+    {
+        beepStep = reqMode * 10;
+        buzzerTimer = now;
+    }
+
+    switch (beepStep)
+    {
+    case 10:
+        tone(PIN_BUZZER, BEEP_FREQ);
+        beepStep = 11;
+        buzzerTimer = now;
+        break;
+    case 11:
+        if (now - buzzerTimer >= 80)
+        {
+            noTone(PIN_BUZZER);
+            beepStep = 0;
+        }
+        break;
+
+    case 20:
+        tone(PIN_BUZZER, BEEP_FREQ);
+        beepStep = 21;
+        buzzerTimer = now;
+        break;
+    case 21:
+        if (now - buzzerTimer >= 70)
+        {
+            noTone(PIN_BUZZER);
+            beepStep = 22;
+            buzzerTimer = now;
+        }
+        break;
+    case 22:
+        if (now - buzzerTimer >= 70)
+        {
+            tone(PIN_BUZZER, BEEP_FREQ);
+            beepStep = 23;
+            buzzerTimer = now;
+        }
+        break;
+    case 23:
+        if (now - buzzerTimer >= 70)
+        {
+            noTone(PIN_BUZZER);
+            beepStep = 0;
+        }
+        break;
+
+    case 30:
+        tone(PIN_BUZZER, BEEP_FREQ);
+        beepStep = 31;
+        buzzerTimer = now;
+        break;
+    case 31:
+        if (now - buzzerTimer >= 350)
+        {
+            noTone(PIN_BUZZER);
+            beepStep = 0;
+        }
+        break;
+
+    default:
+        break;
+    }
+
+    return (beepStep != 0);
+}
 
 static float clampFloat(float val, float minVal, float maxVal, float fallback)
 {
@@ -60,9 +159,22 @@ static float clampFloat(float val, float minVal, float maxVal, float fallback)
     return val;
 }
 
+static float parseAndClampFloat(const char *str, float minVal, float maxVal, float fallback)
+{
+    char *endPtr = nullptr;
+    float val = strtof(str, &endPtr);
+    if (endPtr == str || isnan(val) || isinf(val))
+        return fallback;
+    if (val < minVal)
+        return minVal;
+    if (val > maxVal)
+        return maxVal;
+    return val;
+}
+
 static void sendFeedbackToIOS(const char *msg)
 {
-    Serial.println(msg);
+    Serial.print(msg);
     if (g_bleConnected && g_pTxCharacteristic != nullptr)
     {
         g_pTxCharacteristic->setValue((const uint8_t *)msg, strlen(msg));
@@ -79,7 +191,7 @@ static void reportCurrentStatus(const char *prefix)
 
     char reply[110];
     snprintf(reply, sizeof(reply),
-             "%s | EN:%u SPD:%d(Gear:%d) STR:%d KP:%.1f KD:%.2f TRIM:%.2f OFS:%.2f\n",
+             "%s | EN:%u SPD:%d GEAR:%d STR:%d KP:%.1f KD:%.2f TRIM:%.2f OFS:%.2f\n",
              prefix,
              snap.enable_switch,
              snap.drive_speed,
@@ -92,17 +204,6 @@ static void reportCurrentStatus(const char *prefix)
     sendFeedbackToIOS(reply);
 }
 
-// =========================================================================
-// 3. XU LY TAY CAM GAMEPAD CUA APP "BLUEFRUIT CONNECT" (!B<btn><state><crc>)
-//   Nut 1: BAT Can bang (EN = 1)
-//   Nut 2: TAT Can bang / Dung khan cap (EN = 0, SPD = 0)
-//   Nut 3: Giam muc ga (-10%)
-//   Nut 4: Tang muc ga (+10%)
-//   Mui ten Len   (5): Chay tien khi giu, nha ra = 0
-//   Mui ten Xuong (6): Chay lui khi giu, nha ra = 0
-//   Mui ten Trai  (7): Be lai trai khi giu, nha ra = 0
-//   Mui ten Phai  (8): Be lai phai khi giu, nha ra = 0
-// =========================================================================
 static bool parseBluefruitGamepad(const char *data, size_t len)
 {
     if (len < 4 || data[0] != '!' || data[1] != 'B')
@@ -110,50 +211,57 @@ static bool parseBluefruitGamepad(const char *data, size_t len)
         return false;
     }
 
-    char btn = data[2]; // '1'..'8'
+    char btn = data[2];
     bool press = (data[3] == '1');
+    uint8_t beepMode = 0;
 
     portENTER_CRITICAL(&g_stateMux);
     switch (btn)
     {
-    case '1': // Nut 1: Bat can bang
+    case '1':
         if (press)
+        {
             g_bikeState.enable_switch = 1;
+            beepMode = 1;
+        }
         break;
-    case '2': // Nut 2: Tat can bang & dung banh sau
+    case '2':
         if (press)
         {
             g_bikeState.enable_switch = 0;
             g_bikeState.drive_speed = 0;
+            g_bikeState.steer_angle = 0;
+            g_offsetBeeped = false;
+            beepMode = 3;
         }
         break;
-    case '3': // Nut 3: Giam ga
+    case '3':
         if (press && g_bikeState.speed_gear > 10)
-        {
             g_bikeState.speed_gear -= 10;
-        }
         break;
-    case '4': // Nut 4: Tang ga
+    case '4':
         if (press && g_bikeState.speed_gear < 100)
-        {
             g_bikeState.speed_gear += 10;
-        }
         break;
-    case '5': // Mui ten LEN: Chay tien
+    case '5':
         g_bikeState.drive_speed = press ? g_bikeState.speed_gear : 0;
         break;
-    case '6': // Mui ten XUONG: Chay lui
+    case '6':
         g_bikeState.drive_speed = press ? -g_bikeState.speed_gear : 0;
         break;
-    case '7': // Mui ten TRAI: Re trai
+    case '7':
         g_bikeState.steer_angle = press ? -g_bikeState.steer_step : 0;
         break;
-    case '8': // Mui ten PHAI: Re phai
+    case '8':
         g_bikeState.steer_angle = press ? g_bikeState.steer_step : 0;
         break;
     default:
         portEXIT_CRITICAL(&g_stateMux);
         return false;
+    }
+    if (beepMode != 0)
+    {
+        g_pendingBeepMode = beepMode;
     }
     portEXIT_CRITICAL(&g_stateMux);
 
@@ -161,15 +269,8 @@ static bool parseBluefruitGamepad(const char *data, size_t len)
     return true;
 }
 
-// =========================================================================
-// 4. XU LY LENH GO CHU TINH CHINH THONG SO TAI CHO
-//   EN:1 / EN:0  | SPD:30   | STR:-15
-//   KP:45.0      | KD:3.80  | TRIM:0.50 | OFS:1.30
-//   STOP         | STATUS
-// =========================================================================
 static void parseTextCommand(const char *rawInput, size_t len)
 {
-    // Kiem tra neu la goi tin tay cam Bluefruit Connect (!B...)
     if (parseBluefruitGamepad(rawInput, len))
     {
         return;
@@ -197,79 +298,95 @@ static void parseTextCommand(const char *rawInput, size_t len)
         return;
 
     bool recognized = true;
+    uint8_t beepMode = 0;
 
     portENTER_CRITICAL(&g_stateMux);
     if (strcmp(start, "STOP") == 0 || strcmp(start, "ESTOP") == 0)
     {
         g_bikeState.enable_switch = 0;
         g_bikeState.drive_speed = 0;
+        g_bikeState.steer_angle = 0;
+        g_offsetBeeped = false;
+        beepMode = 3;
+    }
+    else if (strcmp(start, "RESET") == 0 || strcmp(start, "REBOOT") == 0)
+    {
+        g_bikeState.enable_switch = 0;
+        g_bikeState.drive_speed = 0;
+        g_bikeState.steer_angle = 0;
+        g_pendingReset = true;
     }
     else if (strcmp(start, "STATUS") == 0 || strcmp(start, "PING") == 0)
     {
-        // Chi in trang thai
+        beepMode = 1;
     }
     else if (strncmp(start, "EN:", 3) == 0)
     {
-        g_bikeState.enable_switch = (atoi(start + 3) > 0) ? 1 : 0;
+        uint8_t en = (atoi(start + 3) > 0) ? 1 : 0;
+        g_bikeState.enable_switch = en;
+        if (en == 0)
+        {
+            g_offsetBeeped = false;
+            beepMode = 3;
+        }
+        else
+        {
+            beepMode = 1;
+        }
     }
     else if (strncmp(start, "SPD:", 4) == 0)
     {
-        float v = clampFloat(strtof(start + 4, nullptr), -100.0f, 100.0f, 0.0f);
+        float v = parseAndClampFloat(start + 4, -100.0f, 100.0f, 0.0f);
         g_bikeState.drive_speed = (int8_t)lroundf(v);
     }
     else if (strncmp(start, "STR:", 4) == 0)
     {
-        float v = clampFloat(strtof(start + 4, nullptr), -45.0f, 45.0f, 0.0f);
+        float v = parseAndClampFloat(start + 4, -45.0f, 45.0f, 0.0f);
         g_bikeState.steer_angle = (int8_t)lroundf(v);
     }
     else if (strncmp(start, "KP:", 3) == 0)
     {
-        g_bikeState.kp = clampFloat(strtof(start + 3, nullptr), 0.0f, 200.0f, g_bikeState.kp);
+        g_bikeState.kp = parseAndClampFloat(start + 3, 0.0f, 200.0f, g_bikeState.kp);
+        beepMode = 1;
     }
     else if (strncmp(start, "KD:", 3) == 0)
     {
-        g_bikeState.kd = clampFloat(strtof(start + 3, nullptr), 0.0f, 50.0f, g_bikeState.kd);
+        g_bikeState.kd = parseAndClampFloat(start + 3, 0.0f, 50.0f, g_bikeState.kd);
+        beepMode = 1;
     }
     else if (strncmp(start, "TRIM:", 5) == 0)
     {
-        g_bikeState.k_trim = clampFloat(strtof(start + 5, nullptr), 0.0f, 10.0f, g_bikeState.k_trim);
+        g_bikeState.k_trim = parseAndClampFloat(start + 5, 0.0f, 10.0f, g_bikeState.k_trim);
+        beepMode = 1;
     }
     else if (strncmp(start, "OFS:", 4) == 0)
     {
-        g_bikeState.nominal_ofs = clampFloat(strtof(start + 4, nullptr), -10.0f, 10.0f, g_bikeState.nominal_ofs);
+        g_bikeState.nominal_ofs = parseAndClampFloat(start + 4, -10.0f, 10.0f, g_bikeState.nominal_ofs);
+        beepMode = 2;
     }
     else
     {
         recognized = false;
     }
+    if (beepMode != 0)
+    {
+        g_pendingBeepMode = beepMode;
+    }
     portEXIT_CRITICAL(&g_stateMux);
 
     if (recognized)
     {
-        reportCurrentStatus("OK");
+        reportCurrentStatus(g_pendingReset ? "REBOOTING" : "OK");
     }
     else
     {
         char errMsg[96];
         snprintf(errMsg, sizeof(errMsg),
-                 "ERR: '%s' (Dung: EN:1, KP:45, KD:3.8, TRIM:0.5, OFS:1.3, STOP)\n", start);
+                 "ERR: %s | Valid: EN:1 SPD:30 STR:0 KP:45 KD:3.8 TRIM:0.5 OFS:1.3 STOP RESET\n", start);
         sendFeedbackToIOS(errMsg);
     }
 }
 
-// =========================================================================
-// 5. DONG GOI KHUNG 14-BYTE GUI SANG STM32F411RE QUA UART1 (GPIO21 -> PA10)
-//   [0]     0xAA (Header 1)
-//   [1]     0x55 (Header 2)
-//   [2]     enable_switch (uint8: 0 hoac 1)
-//   [3]     drive_speed   (int8: -100..100)
-//   [4]     steer_angle   (int8: -45..45)
-//   [5..6]  kp_x10        (uint16 LE: Kp * 10)
-//   [7..8]  kd_x100       (uint16 LE: Kd * 100)
-//   [9..10] ktrim_x100    (uint16 LE: K_trim * 100)
-//   [11..12] ofs_x100     (int16 LE : nominal_ofs * 100, VD +1.30 -> +130)
-//   [13]    checksum      (XOR tu byte [2] den byte [12])
-// =========================================================================
 static void sendFrameToSTM32()
 {
     BikeControlState snap;
@@ -307,17 +424,37 @@ static void sendFrameToSTM32()
     Serial1.write(frame, sizeof(frame));
 }
 
-// =========================================================================
-// 6. BLE CALLBACKS
-// =========================================================================
+static void setAdvertisingInterval(uint16_t minUnits, uint16_t maxUnits, esp_power_level_t pwrLevel)
+{
+    NimBLEAdvertising *pAdv = NimBLEDevice::getAdvertising();
+    if (pAdv->isAdvertising())
+    {
+        pAdv->stop();
+    }
+    NimBLEDevice::setPower(pwrLevel);
+    pAdv->setMinInterval(minUnits);
+    pAdv->setMaxInterval(maxUnits);
+    pAdv->start();
+}
+
+static void stopAdvertisingRadio()
+{
+    NimBLEAdvertising *pAdv = NimBLEDevice::getAdvertising();
+    if (pAdv->isAdvertising())
+    {
+        pAdv->stop();
+    }
+}
+
 class ServerCallbacks : public NimBLEServerCallbacks
 {
     void onConnect(NimBLEServer *pServer) override
     {
         (void)pServer;
         g_bleConnected = true;
+        NimBLEDevice::setPower(ESP_PWR_LVL_N0);
         digitalWrite(PIN_STATUS_LED, LOW);
-        Serial.println("[BLE] iPhone da ket noi!");
+        triggerBuzzer(1);
     }
 
     void onDisconnect(NimBLEServer *pServer) override
@@ -326,10 +463,12 @@ class ServerCallbacks : public NimBLEServerCallbacks
         g_bleConnected = false;
         portENTER_CRITICAL(&g_stateMux);
         g_bikeState.drive_speed = 0;
+        g_bikeState.steer_angle = 0;
+        g_lastDisconnectedMs = millis();
+        g_pendingBeepMode = 3;
         portEXIT_CRITICAL(&g_stateMux);
 
-        Serial.println("[BLE] Mat ket noi! Dang phat quang cao BLE lai...");
-        NimBLEDevice::startAdvertising();
+        setAdvertisingInterval(160, 320, ESP_PWR_LVL_N0);
     }
 };
 
@@ -341,27 +480,28 @@ class RxCallbacks : public NimBLECharacteristicCallbacks
         if (!rxValue.empty())
         {
             parseTextCommand(rxValue.data(), rxValue.length());
-            sendFrameToSTM32();
+            g_forceSendFrame = true;
         }
     }
 };
 
 void setup()
 {
+    setCpuFrequencyMhz(80);
+
+    pinMode(PIN_BUZZER, OUTPUT);
+    noTone(PIN_BUZZER);
+
     pinMode(PIN_STATUS_LED, OUTPUT);
     digitalWrite(PIN_STATUS_LED, HIGH);
 
     Serial.begin(115200);
     Serial1.begin(STM32_BAUD, SERIAL_8N1, PIN_STM32_RX, PIN_STM32_TX);
 
-    delay(1500);
-    Serial.println("\n====================================================");
-    Serial.println("  BALANCING BIKE - ESP32-C3 BLE CONTROLLER READY");
-    Serial.println("  App iOS khuyen dung: Bluefruit Connect / LightBlue");
-    Serial.println("====================================================");
+    g_lastDisconnectedMs = millis();
 
     NimBLEDevice::init("BalancingBike-C3");
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+    NimBLEDevice::setPower(ESP_PWR_LVL_N0);
 
     NimBLEServer *pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(new ServerCallbacks());
@@ -381,6 +521,8 @@ void setup()
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(NUS_SERVICE_UUID);
     pAdvertising->setScanResponse(true);
+    pAdvertising->setMinInterval(160);
+    pAdvertising->setMaxInterval(320);
     pAdvertising->start();
 }
 
@@ -388,51 +530,133 @@ void loop()
 {
     static uint32_t lastFrameMs = 0;
     static uint32_t lastBlinkMs = 0;
+    static uint32_t hibCycleMs = 0;
     static bool ledState = false;
+    static char stmBuf[65];
+    static size_t stmIdx = 0;
 
+    if (g_pendingReset)
+    {
+        sendFrameToSTM32();
+        Serial1.flush();
+        tone(PIN_BUZZER, BEEP_FREQ);
+        delay(150);
+        noTone(PIN_BUZZER);
+        delay(50);
+        ESP.restart();
+    }
+
+    bool buzzerBusy = updateBuzzer();
     uint32_t now = millis();
 
-    // Gui goi 14-byte xuong STM32 voi tan so 50Hz (20ms)
-    if (now - lastFrameMs >= 20)
+    if (g_bleConnected || (!g_ecoMode && !g_hibernateMode))
     {
-        lastFrameMs = now;
-        sendFrameToSTM32();
-    }
-
-    // Nhan Active_Offset tu STM32 gui len (neu co) va ban len iPhone
-    if (Serial1.available() > 0)
-    {
-        char stmBuf[65];
-        size_t idx = 0;
-        while (Serial1.available() > 0 && idx < sizeof(stmBuf) - 1)
+        if (g_forceSendFrame || (now - lastFrameMs >= 20))
         {
-            char c = (char)Serial1.read();
-            if (c == '\n')
-                break;
-            if (c != '\r')
-                stmBuf[idx++] = c;
-        }
-        stmBuf[idx] = '\0';
-        if (idx > 0)
-        {
-            char msg[80];
-            snprintf(msg, sizeof(msg), "[STM32] %s\n", stmBuf);
-            sendFeedbackToIOS(msg);
+            g_forceSendFrame = false;
+            lastFrameMs = now;
+            sendFrameToSTM32();
         }
     }
 
-    // Den bao trang thai BLE tren GPIO8
+    while (Serial1.available() > 0)
+    {
+        char c = (char)Serial1.read();
+        if (c == '\r')
+        {
+            continue;
+        }
+        if (c == '\n' || stmIdx >= sizeof(stmBuf) - 1)
+        {
+            stmBuf[stmIdx] = '\0';
+            if (stmIdx > 0)
+            {
+                if (!g_offsetBeeped)
+                {
+                    g_offsetBeeped = true;
+                    triggerBuzzer(2);
+                }
+                char msg[80];
+                snprintf(msg, sizeof(msg), "[STM32] %s\n", stmBuf);
+                sendFeedbackToIOS(msg);
+                stmIdx = 0;
+            }
+        }
+        else
+        {
+            stmBuf[stmIdx++] = c;
+        }
+    }
+
     if (!g_bleConnected)
     {
-        if (now - lastBlinkMs >= 500)
+        uint32_t idleElapsed;
+        portENTER_CRITICAL(&g_stateMux);
+        idleElapsed = now - g_lastDisconnectedMs;
+        portEXIT_CRITICAL(&g_stateMux);
+
+        if (idleElapsed >= HIBERNATE_MS)
         {
-            lastBlinkMs = now;
-            ledState = !ledState;
-            digitalWrite(PIN_STATUS_LED, ledState ? LOW : HIGH);
+            if (!g_hibernateMode)
+            {
+                g_hibernateMode = true;
+                g_advWindowOpen = false;
+                hibCycleMs = now;
+                sendFrameToSTM32();
+                stopAdvertisingRadio();
+                digitalWrite(PIN_STATUS_LED, HIGH);
+                triggerBuzzer(3);
+            }
+            else
+            {
+                uint32_t phaseElapsed = now - hibCycleMs;
+                if (!g_advWindowOpen && phaseElapsed >= HIB_OFF_MS)
+                {
+                    g_advWindowOpen = true;
+                    hibCycleMs = now;
+                    setAdvertisingInterval(160, 240, ESP_PWR_LVL_N3);
+                    digitalWrite(PIN_STATUS_LED, LOW);
+                }
+                else if (g_advWindowOpen && phaseElapsed >= 40)
+                {
+                    digitalWrite(PIN_STATUS_LED, HIGH);
+                    if (phaseElapsed >= HIB_ON_MS)
+                    {
+                        g_advWindowOpen = false;
+                        hibCycleMs = now;
+                        stopAdvertisingRadio();
+                    }
+                }
+            }
+        }
+        else if (idleElapsed >= ECO_STANDBY_MS && !g_ecoMode)
+        {
+            g_ecoMode = true;
+            sendFrameToSTM32();
+            setAdvertisingInterval(1280, 1600, ESP_PWR_LVL_N6);
+        }
+
+        if (!g_hibernateMode)
+        {
+            uint32_t blinkPeriod = g_ecoMode ? (ledState ? 60 : 1940) : 500;
+            if (now - lastBlinkMs >= blinkPeriod)
+            {
+                lastBlinkMs = now;
+                ledState = !ledState;
+                digitalWrite(PIN_STATUS_LED, ledState ? LOW : HIGH);
+            }
         }
     }
     else
     {
+        if (g_ecoMode || g_hibernateMode)
+        {
+            g_ecoMode = false;
+            g_hibernateMode = false;
+            g_advWindowOpen = true;
+        }
         digitalWrite(PIN_STATUS_LED, LOW);
     }
+
+    delay((g_hibernateMode && !g_advWindowOpen && !buzzerBusy) ? 20 : 2);
 }
