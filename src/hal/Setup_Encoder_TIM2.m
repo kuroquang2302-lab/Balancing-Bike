@@ -1,9 +1,9 @@
 % =========================================================================
-% KICH BAN KHOI TAO KHOI ENCODER TIM2 TREN CHAN PA15 VA PB3
+% SETUP SCRIPT FOR HARDWARE ENCODER TIM2 ON PINS PA15 AND PB3
 % =========================================================================
 
 clc;
-fprintf('Dang khoi tao khoi EncoderBlock_TIM2...\n');
+fprintf('Initializing EncoderBlock_TIM2 driver source files...\n');
 
 if ~exist('include', 'dir')
     mkdir('include');
@@ -97,4 +97,4 @@ fid_cpp = fopen(fullfile('src', 'soc_stm_encoder_tim2.cpp'), 'w');
 fwrite(fid_cpp, cpp_content);
 fclose(fid_cpp);
 
-fprintf('Hoan tat khoi tao ma nguon ngoai vi TIM2.\n');
+fprintf('Completed TIM2 peripheral driver setup.\n');

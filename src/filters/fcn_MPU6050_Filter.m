@@ -1,9 +1,9 @@
 function [Roll_Angle, Gyro_X_Rate] = fcn_MPU6050_Filter(I2C_Bytes)
 %#codegen
 % =========================================================================
-% BO LOC KALMAN THICH NGHI CAM BIEN QUAN TINH MPU-6050
-% Dau vao : Mang 14 byte du lieu tho doc qua giao tiep I2C
-% Dau ra  : Goc nghieng Roll_Angle va van toc goc Gyro_X_Rate
+% ADAPTIVE 1D KALMAN FILTER FOR MPU-6050 INERTIAL MEASUREMENT UNIT
+% Input  : 14-byte raw sensor data array read over I2C Fast-Mode (400 kHz)
+% Output : Estimated Roll_Angle (deg) and Gyro_X_Rate (deg/s)
 % =========================================================================
 
 dt      = 0.005;
@@ -20,7 +20,7 @@ if isempty(is_init)
     is_init     = true;
 end
 
-% 1. Giai ma du lieu nhi phan bu 2
+% 1. Decode two's complement 16-bit binary accelerometer and gyroscope values
 raw_ay = double(I2C_Bytes(3)) * 256.0 + double(I2C_Bytes(4));
 if raw_ay >= 32768.0
     raw_ay = raw_ay - 65536.0;
@@ -36,7 +36,7 @@ if raw_gx >= 32768.0
     raw_gx = raw_gx - 65536.0;
 end
 
-% 2. Bo qua mau loi khi duong truyen I2C bi gian doan
+% 2. Discard corrupt frames during I2C bus dropouts
 if raw_ay == 0.0 && raw_az == 0.0 && raw_gx == 0.0
     Roll_Angle  = angle;
     Gyro_X_Rate = gyro_lpf;
@@ -46,7 +46,7 @@ end
 acc_roll = atan2(raw_ay, raw_az) * 180.0 / pi;
 gyro_x   = raw_gx / 131.0;
 
-% 3. Uoc luong do lech tinh con quay hoi chuyen trong 200 chu ky dau
+% 3. Estimate static gyroscope bias during initial 200 cycles
 if Calib_Count < 200.0
     bias        = bias + gyro_x / 200.0;
     angle       = acc_roll;
@@ -57,12 +57,12 @@ if Calib_Count < 200.0
     return;
 end
 
-% 4. Buoc du doan trang thai goc nghieng
+% 4. State prediction step
 rate  = gyro_x - bias;
 angle = angle + dt * rate;
 P11   = P11 + Q_angle * dt;
 
-% 5. Buoc cap nhat thich nghi theo bien do gia toc tong hop
+% 5. Adaptive measurement update with total acceleration check
 total_acc = sqrt(raw_ay * raw_ay + raw_az * raw_az) / 16384.0;
 acc_dev   = abs(total_acc - 1.0);
 
@@ -82,7 +82,7 @@ K1    = P11 / (P11 + current_R);
 angle = angle + K1 * y;
 P11   = (1.0 - K1) * P11;
 
-% 6. Loc thong thap van toc goc
+% 6. Low-pass filter angular velocity output
 gyro_lpf = 0.60 * rate + 0.40 * gyro_lpf;
 
 Roll_Angle  = angle;

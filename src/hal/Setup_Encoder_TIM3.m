@@ -1,9 +1,9 @@
 % =========================================================================
-% KICH BAN KHOI TAO KHOI ENCODER TIM3 TREN CHAN PA6 VA PA7
+% SETUP SCRIPT FOR HARDWARE ENCODER TIM3 ON PINS PA6 AND PA7
 % =========================================================================
 
 clc;
-fprintf('Dang khoi tao khoi EncoderBlock_TIM3...\n');
+fprintf('Initializing EncoderBlock_TIM3 driver source files...\n');
 
 if ~exist('include', 'dir')
     mkdir('include');
@@ -87,4 +87,4 @@ fid_cpp = fopen(fullfile('src', 'soc_stm_encoder_tim3.cpp'), 'w');
 fwrite(fid_cpp, cpp_content);
 fclose(fid_cpp);
 
-fprintf('Hoan tat khoi tao ma nguon ngoai vi TIM3.\n');
+fprintf('Completed TIM3 peripheral driver setup.\n');

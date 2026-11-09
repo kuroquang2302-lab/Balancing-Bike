@@ -6,6 +6,19 @@ slprj/
 *.mex*
 *.log
 
+# PlatformIO & Embedded Build Artifacts
+.pio/
+.pioenvs/
+.piolibdeps/
+.clangd/
+
+# IDE & Editor Metadata
+.vscode/
+.idea/
+*.swp
+*~
+
 # OS Metadata
 .DS_Store
 Thumbs.db
+Desktop.ini

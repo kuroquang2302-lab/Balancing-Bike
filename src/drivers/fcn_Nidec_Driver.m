@@ -1,8 +1,8 @@
 function [PWM_Duty_PA8, Dir_PC7, Brake_PC8] = fcn_Nidec_Driver(Enable_Run, Speed_Cmd)
 %#codegen
 % =========================================================================
-% KHOI DIEU KHIEN DONG CO KHONG CHOI THAN NIDEC 24H
-% Chan tin hieu : PA8 - Xung PWM 20 kHz, PC7 - Chieu quay, PC8 - Phanh dien tu
+% NIDEC 24H BRUSHLESS DC MOTOR DRIVER INTERFACE
+% Signal Pins: PA8 - 20 kHz PWM, PC7 - Direction (DIR), PC8 - Brake (BRAKE)
 % =========================================================================
 
 persistent prev_dir stop_cnt
@@ -13,7 +13,7 @@ end
 
 ZERO_DUTY = 94.5;
 
-% 1. Trang thai ngat dong co: Tha troi 0.5 giay dau truoc khi dong phanh
+% 1. Disarmed state: Coast for 0.5s before asserting electromagnetic brake
 if Enable_Run < 0.5
     PWM_Duty_PA8 = 100.0;
     Dir_PC7      = prev_dir;
@@ -31,7 +31,7 @@ end
 
 u = max(min(Speed_Cmd, 100.0), -100.0);
 
-% 2. Vung chet quanh diem 0: Nha phanh va ngat xung
+% 2. Deadband around zero: Release brake and cut PWM power
 if abs(u) < 0.5
     PWM_Duty_PA8 = 100.0;
     Dir_PC7      = prev_dir;
@@ -39,14 +39,14 @@ if abs(u) < 0.5
     return;
 end
 
-% 3. Xac dinh chieu quay
+% 3. Determine rotational direction
 if u >= 0.01
     desired_dir = 0.0;
 else
     desired_dir = 1.0;
 end
 
-% 4. Bao ve khi dao chieu: Ngat xung 1 chu ky truoc khi cap cong suat
+% 4. Reversal protection: Cut power for 1 discrete cycle during direction change
 if desired_dir ~= prev_dir
     PWM_Duty_PA8 = 100.0;
     Dir_PC7      = desired_dir;
@@ -55,7 +55,7 @@ if desired_dir ~= prev_dir
     return;
 end
 
-% 5. Xuat xung dieu khien cong suat
+% 5. Active drive output
 Brake_PC8    = 1.0;
 Dir_PC7      = desired_dir;
 PWM_Duty_PA8 = ZERO_DUTY * (1.0 - abs(u) / 100.0);

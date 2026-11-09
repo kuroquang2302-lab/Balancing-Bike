@@ -1,52 +1,51 @@
-# Nhật Ký Lỗi Kỹ Thuật Và Giải Pháp Xử Lý
+# Engineering Bug Log & Root-Cause Analyses
 
-### 1. Ngược cực tính chân chiều quay DIR trên động cơ Nidec 24H
-- **Hiện tượng:** Khi xuất lệnh điều khiển dương, bánh đà quay ngược chiều phản lực cần thiết.
-- **Nguyên nhân:** Mạch điều khiển tích hợp của Nidec 24H quy định mức logic `0` trên chân `PC7` là quay thuận và mức `1` là quay nghịch.
-- **Giải pháp:** Chuẩn hóa trong `fcn_Nidec_Driver`: gán `Dir_PC7 = 0.0` khi `u >= 0.01` và `Dir_PC7 = 1.0` khi `u < 0.01`.
+### 1. Inverted DIR Pin Logic on Nidec 24H Motor Driver
+- **Symptom:** Applying a positive control command caused the reaction wheel to accelerate in the opposite direction, aggravating frame lean rather than correcting it.
+- **Root Cause:** The internal ASIC of the Nidec 24H defines logic `0` on pin `PC7` as clockwise (CW) rotation and logic `1` as counter-clockwise (CCW).
+- **Resolution:** Standardized inside `fcn_Nidec_Driver.m`: set `Dir_PC7 = 0.0` when `u >= 0.01` and `Dir_PC7 = 1.0` when `u < 0.01`.
 
-### 2. Khựng cơ khí khi tín hiệu điều khiển đi qua vùng chết quanh điểm 0
-- **Hiện tượng:** Bánh đà bị giật cục bộ mỗi khi lệnh điều khiển đổi dấu hoặc có biên độ nhỏ.
-- **Nguyên nhân:** Phiên bản cũ kéo chân phanh `Brake_PC8 = 0.0` ngay khi `|Speed_Cmd| < 0.5`.
-- **Giải pháp:** Giữ `Brake_PC8 = 1.0` và đặt `PWM_Duty_PA8 = 100.0` để bánh đà thả trôi tự do trong vùng chết `|u| < 0.5`; chỉ kích hoạt phanh cứng khi `Enable_Run < 0.5` kéo dài quá $100$ chu kỳ.
+### 2. Mechanical Chattering Across Zero-Crossing Deadband
+- **Symptom:** Noticeable violent acoustic and mechanical shuddering whenever the control signal crossed zero or remained at low amplitude.
+- **Root Cause:** An early driver iteration pulled `Brake_PC8 = 0.0` (engaging electromagnetic braking) whenever $|u| < 0.5\%$.
+- **Resolution:** Maintained `Brake_PC8 = 1.0` (brake disengaged) and set `PWM_Duty_PA8 = 100.0%` (active-low 0% power) across the deadband $|u| < 0.5\%$, allowing the flywheel to coast smoothly. Active braking is only engaged after continuous disarming for $> 100$ control cycles ($0.5\text{ s}$).
 
-### 3. Xung đột chân ngoại vi giữa khối Encoder mẫu và kênh ADC / PWM
-- **Hiện tượng:** Khối Encoder mẫu của thư viện làm mất xung PWM trên `PA8` và gây sai lệch giá trị đọc ADC trên `PA4`.
-- **Nguyên nhân:** Mã nguồn mẫu cấu hình `PA8` và ngắt ngoài trên chân `PA4`.
-- **Giải pháp:** Xây dựng khối `EncoderBlock_TIM3` sử dụng `PA6`, `PA7` trên `TIM3` và xóa bỏ cấu hình ngắt `PA4`.
+### 3. Peripheral Pin Conflict Between Library Encoder Block and ADC/PWM
+- **Symptom:** Standard Simulink external encoder library disabled PWM output on pin `PA8` and corrupted steering feedback readings on `PA4`.
+- **Root Cause:** The generic library code re-initialized `PA8` as an encoder input and configured an external interrupt (EXTI) on `PA4`.
+- **Resolution:** Developed a dedicated `EncoderBlock_TIM3` System Object directly mapping `PA6` and `PA7` to `TIM3` registers, stripping all conflicting interrupt handlers on `PA4`.
 
-### 4. Trôi bão hòa vận tốc bánh đà khi điểm đặt lệch tĩnh
-- **Hiện tượng:** Khi góc đặt lệch hơn $0.2^\circ$ so với vị trí khối tâm thực, bánh đà gia tốc một chiều lên ngưỡng bão hòa điện áp.
-- **Nguyên nhân:** Mô-men trọng lực tĩnh khác không buộc bánh đà phải duy trì gia tốc góc liên tục.
-- **Giải pháp:** Triển khai vòng điều khiển ngoài cập nhật `current_offset` theo vận tốc bánh đà với hệ số `-K_trim` để hội tụ điểm đặt về đúng vị trí khối tâm.
+### 4. Flywheel Velocity Saturation Caused by Static Setpoint Offset
+- **Symptom:** A static lean error as small as $0.2^\circ$ caused the reaction wheel to accelerate monotonically until reaching maximum motor RPM ($3136\text{ RPM}$).
+- **Root Cause:** In the presence of a non-zero static gravitational torque, the inner loop must maintain continuous non-zero motor acceleration, eventually hitting the supply voltage ceiling.
+- **Resolution:** Implemented an outer momentum dumping loop that dynamically shifts `current_offset` proportionally to flywheel velocity via gain `-K_trim`, automatically aligning the frame with the true center of mass.
 
-### 5. Hiệu chuẩn nhầm góc nghiêng khi xe nằm ngang lúc khởi động
-- **Hiện tượng:** Khi xe đang đặt nghiêng trên mặt bàn, bộ điều khiển lấy góc nghiêng lớn làm mốc cân bằng.
-- **Nguyên nhân:** Điều kiện hiệu chuẩn ban đầu chỉ kiểm tra vận tốc góc nhỏ mà không ràng buộc miền góc hợp lệ.
-- **Giải pháp:** Chỉ tích lũy mẫu hiệu chuẩn khi $|\text{Roll\_Angle} - \text{NOMINAL\_OFFSET}| < 4.5^\circ$ và $|\text{Gyro\_X\_Rate}| < 1.5^\circ/\text{s}$.
+### 5. False Calibration When Powering On While Lying Horizontal
+- **Symptom:** When starting the bicycle lying on its side, the controller recorded a large tilt angle as its zero-point reference.
+- **Root Cause:** The initial calibration state machine only checked for low gyro rate without verifying that the roll angle was within a feasible upright range.
+- **Resolution:** Restricted calibration sample accumulation to states satisfying both $|\text{Roll\_Angle} - \text{NOMINAL\_OFFSET}| < 4.5^\circ$ and $|\text{Gyro\_X\_Rate}| < 1.5^\circ/\text{s}$.
 
-### 6. Tự kích hoạt lại động cơ khi nhấc xe sau khi ngã
-- **Hiện tượng:** Sau khi xe ngã vượt $8.0^\circ$, lúc người dùng dựng xe đi qua vùng $< 8.0^\circ$, động cơ tự chạy lại ở công suất lớn.
-- **Nguyên nhân:** Thiếu biến nhớ chốt trạng thái lỗi sau khi vượt ngưỡng góc ngã.
-- **Giải pháp:** Bổ sung biến `fault_latched`, giữ trạng thái ngắt động cơ cho đến khi tắt `Enable_Switch` hoặc giữ xe thẳng đứng yên tĩnh đủ $200$ chu kỳ để hiệu chuẩn lại `saved_offset`.
+### 6. Unintended Motor Re-engagement When Lifting Bike After a Fall
+- **Symptom:** After falling past $8.0^\circ$, picking up the bicycle caused the motor to suddenly spin up at maximum power as the frame crossed the vertical axis.
+- **Root Cause:** The firmware lacked a latched fault state machine after an over-tilt shutdown.
+- **Resolution:** Added `fault_latched` state. Once an over-tilt event occurs ($|e| > 8.0^\circ$), motor output remains permanently disabled until the user cycles `Enable_Switch` or holds the bike stationary in the upright position for 200 consecutive cycles.
 
-### 7. Đóng ngắt công suất liên tục tại ngưỡng 3000 RPM
-- **Hiện tượng:** Khi tốc độ bánh đà chạm $3000\text{ RPM}$, lệnh điều khiển nhảy bậc giữa mức cực đại và $0\%$.
-- **Nguyên nhân:** Sử dụng phép so sánh ngưỡng cứng dạng nhị phân.
-- **Giải pháp:** Áp dụng hàm suy giảm tuyến tính hệ số `scale` trong dải từ $2500\text{ RPM}$ đến $3000\text{ RPM}$ đối với các lệnh cùng chiều quay.
+### 7. Limit-Cycle Chattering at 3000 RPM Overspeed Threshold
+- **Symptom:** When flywheel speed approached $3000\text{ RPM}$, the control command chattered abruptly between maximum output and $0\%$.
+- **Root Cause:** Binary threshold comparison cut power discontinuously at the ceiling.
+- **Resolution:** Implemented a continuous linear scaling window from $2500\text{ RPM}$ to $3000\text{ RPM}$ for commands acting in the direction of motor rotation, while preserving 100% recovery braking torque for opposing commands.
 
-### 8. Xung đột thời gian khởi tạo làm chốt nhầm điểm đặt 0.0 độ và nhiễm bẩn Gyro bias
-- **Hiện tượng:** Điểm đặt bị chốt cố định tại $0.0^\circ$ khi `Enable_Switch` nối cứng mức `1`, đồng thời góc ước lượng bị trôi khi khung xe lắc mạnh.
-- **Nguyên nhân:** Bộ lọc xuất `0.0` trong thời gian đo bias khiến bộ điều khiển chốt hiệu chuẩn sớm; gia tốc tiếp tuyến tại độ cao lắp đặt $60\text{ mm}$ làm lệch vector trọng trường biểu kiến.
-- **Giải pháp:** Bộ lọc xuất `Gyro_X_Rate = 999.0` trong $200$ chu kỳ đầu để khóa bộ điều khiển; tăng hiệp phương sai nhiễu đo `current_R` lên gấp $3 - 10$ lần khi $|\text{total\_acc} - 1.0| > 0.08$ và chỉ cập nhật chậm `bias` khi hệ thống tĩnh.
+### 8. Premature Calibration Latch and Tangential Acceleration Contamination
+- **Symptom:** Balance setpoint erroneously locked to $0.0^\circ$ when `Enable_Switch` was tied high at startup, and estimated roll angle drifted during rapid lateral oscillation.
+- **Root Cause:** The Kalman filter output $0.0$ while estimating initial gyro bias, causing the controller to latch premature calibration data. Furthermore, centripetal/tangential accelerations at the 60 mm sensor mounting height corrupted the gravity vector.
+- **Resolution:** Programmed the filter to output a busy sentinel flag (`Gyro_X_Rate = 999.0`) during the first 200 samples to hold the controller in standby. Implemented dynamic measurement covariance scaling: $R$ increases up to 10x whenever total acceleration deviates from $1.0g$ by $> 0.08g$.
 
-### 9. Hụt mô-men phục hồi tại điểm đổi chiều trên động cơ điều khiển vận tốc
-- **Hiện tượng:** Khi góc nghiêng vượt quá $2.0^\circ$ và vận tốc góc thân xe về $0^\circ/\text{s}$ tại biên độ cực đại, bánh đà ngừng tăng tốc làm xe không thể tự kéo về vị trí cân bằng.
-- **Nguyên nhân:** Với cơ cấu chấp hành nhận lệnh vận tốc như Nidec 24H, đạo hàm của luật PD thuần túy bằng $0$ khi $\dot{\theta} = 0$ và $\ddot{\theta} = 0$.
-- **Giải pháp:** Bổ sung khâu bù trước trọng lực `u_grav` và khâu tích phân sai số góc `int_err` có giới hạn Anti-windup để duy trì tốc độ biến thiên lệnh $\dot{u} \neq 0$ tại điểm đổi chiều.
+### 9. Lost Restoring Torque at Motion Reversal in Velocity-Mode BLDC
+- **Symptom:** When roll angle exceeded $2.0^\circ$ and angular velocity dropped to $0^\circ/\text{s}$ at the apex of a lean cycle, the motor ceased to accelerate, allowing the bike to fall.
+- **Root Cause:** For velocity-mode actuators where $\tau \propto \dot{u}$, the time derivative of a pure PD control law equals zero when $\dot{\theta} = 0$ and $\ddot{\theta} = 0$.
+- **Resolution:** Introduced non-linear gravity feedforward $u_{\text{grav}} = -K_g \sin(e)$ and anti-windup error integration $u_{\text{int}} = -K_i \int e\,dt$ to guarantee non-zero $\dot{u}$ at turning points.
 
-
-### 9. Chập tụ gốm lọc nhiễu đường khởi tạo lại trên bo mạch ESP32-C3 Super Mini
-- **Hiện tượng:** Khi cấp nguồn qua cổng USB Type-C, đèn báo nguồn vẫn sáng và điện áp đầu ra bộ ổn áp đạt đủ 3.34 V nhưng đèn trạng thái trên chân GPIO8 không hoạt động và máy tính hoàn toàn không nhận diện được thiết bị USB JTAG/Serial.
-- **Nguyên nhân:** Tụ gốm dán 100 nF mắc song song với nút nhấn RST giữa đường tín hiệu kích hoạt chip `CHIP_EN` và `GND` bị nứt chập cơ học từ quá trình gia công, kéo chân `CHIP_EN` xuống mức 0 V làm vi điều khiển bị giữ cố định ở trạng thái khởi tạo lại.
-- **Khắc phục:** Đo kiểm tra thông mạch trên đường `CHIP_EN` để xác định linh kiện chập và loại bỏ tụ lọc bị lỗi khỏi bo mạch, giúp chân `CHIP_EN` được kéo lên mức áp cao 3.3 V qua điện trở 10 kOhm và khôi phục hoàn toàn giao tiếp nạp chương trình.
+### 10. Hardware Reset Short Circuit on ESP32-C3 Super Mini Board
+- **Symptom:** Power LED illuminated and 3.3V LDO measured stable at 3.34V, but status LED on GPIO8 remained unlit and the host PC failed to enumerate the USB JTAG/Serial device.
+- **Root Cause:** A 100 nF surface-mount ceramic bypass capacitor in parallel with the RST tactile switch had suffered mechanical cracking during PCB manufacture, shorting the `CHIP_EN` line directly to ground ($0\text{ V}$).
+- **Resolution:** Probed continuity along the `CHIP_EN` net, isolated the fractured MLCC capacitor, and desoldered it from the board. The internal $10\text{ k}\Omega$ pull-up restored `CHIP_EN` to 3.3V, successfully recovering firmware upload and normal MCU operation.

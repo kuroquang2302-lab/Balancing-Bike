@@ -1,21 +1,21 @@
-# Tiến Độ Phát Triển Hệ Thống
+# Development Roadmap & System Milestones
 
-### Giai đoạn 1: Giao tiếp ngoại vi và cảm biến quán tính
-- Cấu hình giao tiếp I2C Fast-Mode $400\text{ kHz}$ đọc dữ liệu thô $14\text{ byte}$ từ cảm biến MPU-6050 và xây dựng bộ lọc Kalman 1D.
-- Khởi tạo các bộ định thời phần cứng `TIM1`, `TIM2`, `TIM3`, `TIM4` và kênh đọc tương tự `ADC1_IN4` trên vi điều khiển STM32F411RE.
+### Phase 1: Peripheral Interfacing & Inertial State Estimation
+- Configure I2C Fast-Mode at $400\text{ kHz}$ to stream 14-byte raw sensor frames from the MPU-6050 and build the discrete 1D adaptive Kalman filter.
+- Configure STM32F411RE hardware peripherals: `TIM1` (20 kHz PWM), `TIM2` (rear encoder), `TIM3` (flywheel encoder), `TIM4` (servo PWM), and `ADC1_IN4` (potentiometer feedback).
 
-### Giai đoạn 2: Xây dựng trình điều khiển động cơ và máy trạng thái hiệu chuẩn
-- Thiết kế khối `fcn_Nidec_Driver` điều khiển xung PWM $20\text{ kHz}$ Active-Low, bảo vệ ngắt xung khi đảo chiều quay và phanh hai giai đoạn.
-- Xây dựng máy trạng thái tự động hiệu chuẩn góc cân bằng tĩnh, cơ chế khóa lỗi khi ngã `fault_latched` và tự động mở khóa khi dựng xe thẳng đứng.
+### Phase 2: Actuator Drivers & Calibration State Machine
+- Develop `fcn_Nidec_Driver` with active-low $20\text{ kHz}$ PWM, deadband compensation, one-sample reversal blanking, and two-stage braking.
+- Implement the automatic static center-of-mass calibration state machine, over-tilt shutdown logic, and latched fault reset routines.
 
-### Giai đoạn 3: Tối ưu hóa bộ lọc Kalman thích nghi và khử trễ pha
-- Thiết lập cơ chế báo bận `Gyro_X_Rate = 999.0` trong $200$ chu kỳ đầu để đồng bộ thời gian khởi tạo giữa bộ lọc và bộ điều khiển.
-- Điều chỉnh động hiệp phương sai nhiễu đo theo biên độ gia tốc tổng hợp nhằm loại bỏ nhiễu gia tốc tiếp tuyến và nâng hệ số lọc thông thấp vận tốc góc lên $0.60$.
+### Phase 3: Adaptive Kalman Tuning & Phase-Lag Minimization
+- Establish the filter-to-controller handshake using the `Gyro_X_Rate = 999.0` busy flag during initial 200-sample gyro drift profiling.
+- Implement adaptive measurement noise covariance ($R$) scaling based on total acceleration magnitude ($|\mathbf{a}| \ne 1g$) to reject centripetal and tangential disturbances; tune low-pass gyro rate filter coefficient to $0.60$.
 
-### Giai đoạn 4: Hoàn thiện kiến trúc điều khiển cân bằng hai vòng lặp
-- Tích hợp khâu bù trước mô-men trọng lực, bộ điều khiển PID vòng trong có kẹp chống bão hòa tích phân Anti-windup và bộ giới hạn độ dốc lệnh Slew-rate.
-- Kết hợp vòng điều khiển ngoài điều chỉnh điểm đặt động theo phản hồi vận tốc bánh đà từ `TIM3` và hàm suy giảm tuyến tính công suất ở tốc độ cao.
+### Phase 4: Cascaded Two-Loop Balance Controller Integration
+- Synthesize non-linear gravity feedforward, inner PID with anti-windup clamping, and an $8.0\% / 5\text{ ms}$ slew-rate limiter.
+- Combine outer momentum dumping loop using TIM3 velocity feedback with soft linear power derating between $2500\text{ RPM}$ and $3000\text{ RPM}$.
 
-### Giai đoạn 5: Tích hợp cầu nối điều khiển không dây BLE trên ESP32-C3 Super Mini
-- Xây dựng firmware máy chủ BLE 5.0 theo chuẩn Nordic UART Service (NUS) trên vi điều khiển ESP32-C3 Super Mini, tương thích với ứng dụng điều khiển trên hệ điều hành iOS.
-- Thiết kế giao thức đóng gói khung nhị phân 14 byte có mã kiểm tra XOR truyền qua ngoại vi `USART1` (`PA9`/`PA10`) ở tần số $50\text{ Hz}$ để điều khiển hướng lái, vận tốc và tinh chỉnh thông số bộ điều khiển tại chỗ.
+### Phase 5: Wireless BLE 5.0 Co-Processor & Telemetry Bridge
+- Develop BLE 5.0 server firmware on ESP32-C3 Super Mini implementing the Nordic UART Service (NUS) for iOS interoperability.
+- Implement fixed 14-byte XOR-checksummed binary packet protocol over `USART1` (`PA9`/`PA10`) at $50\text{ Hz}$ for gamepad steering, throttle, live parameter tuning, and acoustic buzzer feedback.

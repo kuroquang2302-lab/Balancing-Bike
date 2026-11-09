@@ -1,6 +1,6 @@
 /* =========================================================================
- * GIAO TIEP ENCODER PHAN CUNG TIM3 TREN VI DIEU KHIEN STM32F411RE
- * Chan tin hieu : PA6 - TIM3_CH1, PA7 - TIM3_CH2
+ * STM32F411RE TIM3 HARDWARE QUADRATURE ENCODER INTERFACE
+ * Signal Pins: PA6 - TIM3_CH1 (Channel A), PA7 - TIM3_CH2 (Channel B)
  * ========================================================================= */
 
 #include "soc_stm_encoder_tim3.h"

@@ -1,82 +1,98 @@
-# Đặc Tả Giao Tiếp Không Dây BLE Và Cầu Nối ESP32-C3 Super Mini
+# Wireless BLE 5.0 Specification & ESP32-C3 Co-Processor Protocol
 
-## 1. Kiến Trúc Phối Hợp Hai Vi Điều Khiển
+## 1. Dual-MCU Partitioning Rationale
 
-Để đảm bảo tính tất định thời gian thực cho vòng lặp điều khiển cân bằng ở tần số lấy mẫu $200\text{ Hz}$ ($5\text{ ms}$) trên vi điều khiển trung tâm `STM32F411RE`, toàn bộ ngăn xếp giao thức không dây Bluetooth Low Energy (BLE 5.0) được tách biệt sang vi điều khiển đồng xử lý `ESP32-C3 Super Mini`.
+To maintain deterministic, hard real-time execution for the $200\text{ Hz}$ ($5\text{ ms}$) balance control loop on the primary `STM32F411RE` microcontroller, all Bluetooth Low Energy (BLE 5.0) protocol stack processing and string parsing are delegated to an auxiliary `ESP32-C3 Super Mini` co-processor.
 
-- **Thiết bị điều khiển (iOS):** Ứng dụng `Adafruit Bluefruit LE Connect` hoặc `LightBlue` kết nối với `ESP32-C3` thông qua dịch vụ chuẩn Nordic UART Service (NUS).
-- **Khối đồng xử lý không dây (`ESP32-C3 Super Mini`):** Giải mã gói tin nút bấm điều khiển hướng lái và các lệnh tinh chỉnh thông số tại chỗ, sau đó đóng gói thành khung dữ liệu nhị phân cố định $14\text{ byte}$ có mã kiểm tra lỗi đồng vị `XOR` và phát định kỳ ở tần số $50\text{ Hz}$ ($20\text{ ms}$) sang `STM32F411RE`.
-- **Khối điều khiển trung tâm (`STM32F411RE Nucleo-64`):** Thu nhận khung lệnh qua ngoại vi `USART1` và gửi phản hồi giá trị góc cân bằng động `Active_Offset` ở tần số thấp ($1\text{ Hz}$) về thiết bị di động.
+- **Client Controller (iOS):** Connects via `Adafruit Bluefruit LE Connect` or `LightBlue` using the Nordic UART Service (NUS).
+- **Wireless Co-Processor (`ESP32-C3 Super Mini`):** Receives raw character streams, decodes button events and text commands, formats them into fixed 14-byte binary packets with an XOR checksum, and transmits them at $50\text{ Hz}$ ($20\text{ ms}$) to the STM32 via `USART1`.
+- **Primary Control Core (`STM32F411RE Nucleo-64`):** Parses the 14-byte packets via UART DMA/interrupts and periodically replies with the active dynamic balance offset at $1\text{ Hz}$.
 
 ---
 
-## 2. Sơ Đồ Đấu Nối Phần Cứng (`ESP32-C3` ↔ `STM32F411RE Nucleo-64`)
+## 2. Hardware Interconnect (ESP32-C3 <-> STM32F411RE Nucleo-64)
 
-| Dây Số | Chân `ESP32-C3 Super Mini` | Chân `STM32F411RE` | Ký Hiệu Header Nucleo-64 | Đặc Tính Tín Hiệu |
+| Wire # | ESP32-C3 Super Mini Pin | STM32F411RE Pin | Nucleo-64 Header | Signal Description |
 | :---: | :--- | :--- | :---: | :--- |
-| **1** | `GPIO21` (`U0TXD`) | `PA10` (`USART1_RX`) | `D2` (`CN9`) | Truyền khung lệnh nhị phân $14\text{ byte}$, tốc độ $115200\text{ bps}$, mức logic $3.3\text{ V}$ |
-| **2** | `GPIO20` (`U0RXD`) | `PA9` (`USART1_TX`) | `D8` (`CN5`) | Nhận phản hồi `Active_Offset` từ `STM32`, tốc độ $115200\text{ bps}$, mức logic $3.3\text{ V}$ |
-| **3** | `GND` | `GND` | `GND` (`CN6` / `CN5`) | Điểm tham chiếu điện áp chung của toàn hệ thống |
-| **4** | `5V` (`VBUS`) | `5V` | `5V` (`CN6` / Mạch hạ áp) | Nguồn nuôi $5.0\text{ V}$ qua bộ ổn áp nội `ME6211` tạo $3.3\text{ V}$ cho `ESP32-C3` |
+| **1** | `GPIO21` (`U0TXD`) | `PA10` (`USART1_RX`) | `D2` (`CN9`) | Transmits 14-byte command frames (115200 bps, 8N1, 3.3V) |
+| **2** | `GPIO20` (`U0RXD`) | `PA9` (`USART1_TX`) | `D8` (`CN5`) | Receives active offset telemetry from STM32 (115200 bps) |
+| **3** | `GND` | `GND` | `GND` (`CN6`/`CN5`) | Common system ground reference plane |
+| **4** | `5V` (`VBUS`) | `5V` | `5V` (`CN6` / Buck) | 5.0V supply input feeding onboard ME6211 3.3V LDO |
 
-> **Quy tắc cách ly nguồn cấp:** Không cấp đồng thời nguồn ngoài vào chân `5V` của `ESP32-C3 Super Mini` khi đang kết nối cáp `USB Type-C` với máy tính. Khi gỡ lỗi qua cổng USB của `ESP32-C3`, ngắt kết nối dây nguồn `5V` và chỉ giữ lại 3 dây `GND`, `GPIO21`, `GPIO20`.
+> [!WARNING]
+> **Power Isolation Rule:** Never apply 5V power to the `VBUS` pin while a USB Type-C cable is simultaneously plugged into a computer. During USB programming or debugging on the ESP32-C3, disconnect the external 5V wire and keep only `GND`, `GPIO21`, and `GPIO20` connected to the STM32.
 
 ---
 
-## 3. Đặc Tả Dịch Vụ BLE Và Tập Lệnh Giao Tiếp Trên iOS
+## 3. BLE Service Specification & iOS Command Protocol
 
-### 3.1. Định danh dịch vụ Nordic UART Service (NUS)
-- **Tên thiết bị quảng bá:** `BalancingBike-C3`
+### 3.1. Nordic UART Service (NUS) Identifiers
+- **Advertised Device Name:** `BalancingBike-C3`
 - **Service UUID:** `6E400001-B5A3-F393-E0A9-E50E24DCCA9E`
-- **RX Characteristic UUID (Ghi lệnh từ iOS xuống ESP32):** `6E400002-B5A3-F393-E0A9-E50E24DCCA9E` (`WRITE` / `WRITE_WITHOUT_RESPONSE`)
-- **TX Characteristic UUID (Thông báo từ ESP32 lên iOS):** `6E400003-B5A3-F393-E0A9-E50E24DCCA9E` (`NOTIFY` / `READ`)
+- **RX Characteristic UUID (iOS -> ESP32):** `6E400002-B5A3-F393-E0A9-E50E24DCCA9E` (`WRITE` / `WRITE_WITHOUT_RESPONSE`)
+- **TX Characteristic UUID (ESP32 -> iOS):** `6E400003-B5A3-F393-E0A9-E50E24DCCA9E` (`NOTIFY` / `READ`)
 
-### 3.2. Bảng ánh xạ nút bấm chế độ Control Pad (`!B<id><state><crc>`)
+### 3.2. Bluefruit Control Pad Mapping (`!B<id><state><crc>`)
 
-| Phím Trên Ứng Dụng iOS | Mã Gói Tin Nhấn / Nhả | Tác Vụ Điều Khiển Tương Ứng |
+| iOS Control Pad Button | Raw Packet (Press / Release) | Control Function |
 | :--- | :--- | :--- |
-| **Phím số `1`** | `!B11` / `!B10` | Kích hoạt chế độ tự cân bằng (`Enable_Switch = 1`) |
-| **Phím số `2`** | `!B21` / `!B20` | Ngắt khẩn cấp động cơ bánh đà và dừng bánh sau (`Enable_Switch = 0`, `Drive_Speed = 0`) |
-| **Phím số `3`** | `!B31` / `!B30` | Giảm mức tốc độ đặt trước của bánh sau đi $10\%$ (Tối thiểu $10\%$) |
-| **Phím số `4`** | `!B41` / `!B40` | Tăng mức tốc độ đặt trước của bánh sau thêm $10\%$ (Tối đa $100\%$) |
-| **Mũi tên Lên (`▲`)** | `!B51` / `!B50` | Cấp lệnh chạy tiến bánh sau khi nhấn giữ; tự động đưa về $0\%$ khi nhả phím |
-| **Mũi tên Xuống (`▼`)** | `!B61` / `!B60` | Cấp lệnh chạy lùi bánh sau khi nhấn giữ; tự động đưa về $0\%$ khi nhả phím |
-| **Mũi tên Trái (`◄`)** | `!B71` / `!B70` | Bẻ lái cơ cấu Servo sang trái ($-25^\circ$) khi nhấn giữ; tự trả về $0^\circ$ khi nhả phím |
-| **Mũi tên Phải (`►`)** | `!B81` / `!B80` | Bẻ lái cơ cấu Servo sang phải ($+25^\circ$) khi nhấn giữ; tự trả về $0^\circ$ khi nhả phím |
+| **Button `1`** | `!B11` / `!B10` | Arm / Enable balance controller (`Enable_Switch = 1`) |
+| **Button `2`** | `!B21` / `!B20` | Emergency Disarm: stop flywheel and rear motor (`Enable_Switch = 0`, `Drive_Speed = 0`) |
+| **Button `3`** | `!B31` / `!B30` | Decrement rear drive speed gear by $10\%$ (Minimum: $10\%$) |
+| **Button `4`** | `!B41` / `!B40` | Increment rear drive speed gear by $10\%$ (Maximum: $100\%$) |
+| **Up Arrow (`UP`)** | `!B51` / `!B50` | Drive forward while held; returns to $0\%$ upon release |
+| **Down Arrow (`DOWN`)** | `!B61` / `!B60` | Drive reverse while held; returns to $0\%$ upon release |
+| **Left Arrow (`LEFT`)** | `!B71` / `!B70` | Steer servo left ($-25^\circ$) while held; returns to $0^\circ$ upon release |
+| **Right Arrow (`RIGHT`)** | `!B81` / `!B80` | Steer servo right ($+25^\circ$) while held; returns to $0^\circ$ upon release |
 
-### 3.3. Tập lệnh văn bản tinh chỉnh thông số tại chỗ (Chế độ UART Terminal)
+### 3.3. Live Terminal Tuning Commands (UART Terminal Mode)
 
-| Cú Pháp Lệnh | Phạm Vi Hợp Lệ | Giá Trị Mặc Định | Mô Tả Chức Năng |
+| Command Syntax | Valid Range | Default Value | Description |
 | :--- | :---: | :---: | :--- |
-| `EN:<0\|1>` | $0$ hoặc $1$ | $0$ | Bật hoặc tắt trạng thái hoạt động của bộ điều khiển cân bằng |
-| `SPD:<val>` | $-100 \div +100$ | $0$ | Đặt trực tiếp phần trăm công suất động cơ truyền động bánh sau |
-| `STR:<val>` | $-45 \div +45$ | $0$ | Đặt trực tiếp góc quay cơ cấu lái Servo MG995 (đơn vị: độ) |
-| `KP:<val>` | $0.0 \div 200.0$ | $45.0$ | Tinh chỉnh hệ số khuếch đại tỉ lệ $K_p$ của vòng điều khiển trong |
-| `KD:<val>` | $0.0 \div 50.0$ | $3.80$ | Tinh chỉnh hệ số khuếch đại vi sai $K_d$ của vòng điều khiển trong |
-| `TRIM:<val>` | $0.0 \div 10.0$ | $0.50$ | Tinh chỉnh hệ số dịch chuyển điểm đặt $K_{\text{trim}}$ của vòng điều khiển ngoài |
-| `OFS:<val>` | $-10.0 \div +10.0$ | $+1.30$ | Tinh chỉnh góc cân bằng tĩnh danh định $\theta_{\text{nominal}}$ (đơn vị: độ) |
-| `STATUS` | — | — | Yêu cầu xuất toàn bộ thông số hiện hành lên màn hình thiết bị iOS |
-| `STOP` | — | — | Ngắt ngay lập tức công suất các cơ cấu chấp hành |
+| `EN:<0\|1>` | $0$ or $1$ | $0$ | Enable ($1$) or disable ($0$) balance control |
+| `SPD:<val>` | $-100 \dots +100$ | $0$ | Direct rear motor drive throttle percentage |
+| `STR:<val>` | $-45 \dots +45$ | $0$ | Direct steering servo angle in degrees |
+| `KP:<val>` | $0.0 \dots 200.0$ | $45.0$ | Proportional gain $K_p$ for inner balance loop |
+| `KD:<val>` | $0.0 \dots 50.0$ | $3.80$ | Derivative gain $K_d$ for inner balance loop |
+| `TRIM:<val>` | $0.0 \dots 10.0$ | $0.50$ | Trim gain $K_{\text{trim}}$ for outer momentum dumping loop |
+| `OFS:<val>` | $-10.0 \dots +10.0$ | $+1.30$ | Nominal static balance offset angle in degrees |
+| `STATUS` / `PING` | -- | -- | Print active runtime state and firmware version to terminal |
+| `STOP` | -- | -- | Instantaneous disarm and actuator shutdown |
+| `RESET` / `REBOOT` | -- | -- | Send zero frame, flush UART, emit beep, and software reboot ESP32 |
 
 ---
 
-## 4. Cấu Trúc Khung Truyền Nhị Phân `USART1` ($14\text{ Bytes}$)
+## 4. Binary Inter-MCU Packet Structure ($14\text{ Bytes}$)
 
-Khung truyền từ `ESP32-C3` (`GPIO21`) sang `STM32F411RE` (`PA10`) được đóng gói theo chuẩn thứ tự byte thấp trước (`Little-Endian`):
+Frames are transmitted from `ESP32-C3` (`GPIO21`) to `STM32F411RE` (`PA10`) in little-endian format at $50\text{ Hz}$ ($20\text{ ms}$ interval):
 
-| Vị Trí Byte | Tên Trường Dữ Liệu | Kiểu Dữ Liệu | Hệ Số Quy Đổi | Mô Tả Chi Tiết |
+| Byte Index | Field Name | Data Type | Scaling Factor | Description |
 | :---: | :--- | :---: | :---: | :--- |
-| `0` | `HEADER_1` | `uint8` | — | Byte đồng bộ đầu khung thứ nhất (`0xAA`) |
-| `1` | `HEADER_2` | `uint8` | — | Byte đồng bộ đầu khung thứ hai (`0x55`) |
-| `2` | `Enable_Switch` | `uint8` | $\times 1$ | Trạng thái kích hoạt cân bằng (`0` hoặc `1`) |
-| `3` | `Drive_Speed` | `int8` | $\times 1$ | Lệnh tốc độ động cơ bánh sau ($-100\%$ đến $+100\%$) |
-| `4` | `Steer_Angle` | `int8` | $\times 1$ | Lệnh góc lái cơ cấu Servo ($-45^\circ$ đến $+45^\circ$) |
-| `5..6` | `Kp_Scaled` | `uint16` | $\times 10$ | Hệ số $K_p$ nhân $10$ (Ví dụ: $45.0 \rightarrow 450$) |
-| `7..8` | `Kd_Scaled` | `uint16` | $\times 100$ | Hệ số $K_d$ nhân $100$ (Ví dụ: $3.80 \rightarrow 380$) |
-| `9..10` | `Ktrim_Scaled` | `uint16` | $\times 100$ | Hệ số $K_{\text{trim}}$ nhân $100$ (Ví dụ: $0.50 \rightarrow 50$) |
-| `11..12` | `Offset_Scaled` | `int16` | $\times 100$ | Góc cân bằng danh định nhân $100$ (Ví dụ: $+1.30^\circ \rightarrow 130$) |
-| `13` | `Checksum` | `uint8` | — | Phép toán `XOR` liên tiếp từ `Byte 2` đến `Byte 12` |
+| `0` | `HEADER_1` | `uint8` | — | Sync byte 1: `0xAA` |
+| `1` | `HEADER_2` | `uint8` | — | Sync byte 2: `0x55` |
+| `2` | `Enable_Switch` | `uint8` | $\times 1$ | Controller arm state (`0` or `1`) |
+| `3` | `Drive_Speed` | `int8` | $\times 1$ | Rear motor throttle ($-100 \dots +100\%$) |
+| `4` | `Steer_Angle` | `int8` | $\times 1$ | Steering angle ($-45^\circ \dots +45^\circ$) |
+| `5..6` | `Kp_Scaled` | `uint16` | $\times 10$ | $K_p \times 10$ (e.g. $45.0 \to 450$) |
+| `7..8` | `Kd_Scaled` | `uint16` | $\times 100$ | $K_d \times 100$ (e.g. $3.80 \to 380$) |
+| `9..10` | `Ktrim_Scaled` | `uint16` | $\times 100$ | $K_{\text{trim}} \times 100$ (e.g. $0.50 \to 50$) |
+| `11..12` | `Offset_Scaled` | `int16` | $\times 100$ | Nominal offset angle $\times 100$ (e.g. $+1.30^\circ \to 130$) |
+| `13` | `Checksum` | `uint8` | — | Longitudinal XOR checksum over bytes 2 through 12 |
 
-Phương trình kiểm tra tính toàn vẹn của khung truyền tại bộ thu `STM32F411RE`:
+Checksum verification formula at the STM32 receiver:
 
 $$\text{Checksum} = \bigoplus_{k=2}^{12} \text{Frame}[k]$$
+
+---
+
+## 5. Acoustic Buzzer Feedback & Thermal Management
+
+### 5.1. Non-Blocking Buzzer Patterns (2.7 kHz Resonance)
+- **Single Short Beep (80 ms):** Triggered on BLE client connection, parameter tuning command acknowledge, or enable command.
+- **Double Beep (70 ms ON / 70 ms OFF / 70 ms ON):** Triggered upon receiving the first dynamic offset confirmation from STM32 or nominal offset adjustment.
+- **Triple Beep (70 ms cadence):** Triggered on BLE disconnect, emergency stop, or hibernation entry.
+
+### 5.2. 3-Tier Power & Thermal Management
+1. **Active Connected Mode:** CPU clock at 80 MHz, BLE TX power at 0 dBm (`ESP_PWR_LVL_N0`), continuous 50 Hz frame transmission.
+2. **Eco Standby Mode (Triggered after 60s idle disconnect):** Advertising interval relaxed to 800 ms – 1000 ms, RF power reduced to -6 dBm, single 60 ms LED flash every 2.0 s, periodic frames halted.
+3. **Duty-Cycled Hibernation Mode (Triggered after 180s idle disconnect):** Deep radio duty-cycling with 4.0s radio OFF followed by 1.0s radio ON at -3 dBm. Reduces thermal dissipation and power draw significantly while allowing spontaneous reconnection without physical power cycling.

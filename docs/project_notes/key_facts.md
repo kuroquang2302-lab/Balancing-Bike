@@ -1,30 +1,30 @@
-# Thông Số Kỹ Thuật Và Đặc Tính Thực Nghiệm
+# Technical Specifications & Empirical Parameters
 
-## 1. Thông Số Cơ Khí
-- **Tổng khối lượng hệ thống:** $750\text{ g} - 800\text{ g}$ bao gồm khung in 3D, hai động cơ BLDC Nidec 24H, Servo MG995, pin Li-Po 3S và bo mạch Nucleo-64.
-- **Bánh đà phản lực:** Khối lượng $100.0\text{ g}$, đường kính $130\text{ mm}$, mô-men quán tính $J = 3.1 \times 10^{-4}\text{ kg}\cdot\text{m}^2$.
-- **Chiều dài cơ sở:** $0.22\text{ m}$ giữa hai trục bánh xe.
-- **Truyền động bánh sau:** Đai răng GT2 bản rộng $6\text{ mm}$, chu vi $240\text{ mm}$.
+## 1. Mechanical Properties
+- **Total System Mass:** $750\text{ g} \dots 800\text{ g}$ (including 3D-printed chassis, dual Nidec 24H motors, MG995 servo, 3S LiPo battery, and Nucleo-64 board).
+- **Reaction Flywheel:** Mass $100.0\text{ g}$, outer diameter $130\text{ mm}$, moment of inertia $J = 3.1 \times 10^{-4}\text{ kg}\cdot\text{m}^2$.
+- **Wheelbase:** $0.22\text{ m}$ between front and rear axle centers.
+- **Rear Wheel Drive:** GT2 timing belt, $6\text{ mm}$ width, $240\text{ mm}$ pitch length.
 
-## 2. Cảm Biến Quán Tính MPU-6050
-- **Vị trí lắp đặt:** Độ cao $60\text{ mm}$ so với mặt phẳng tiếp đất; trục X dọc thân xe, trục Y ngang thân xe.
-- **Góc cân bằng tĩnh danh định:** $+1.30^\circ$.
-- **Độ trôi tĩnh vận tốc góc sau hiệu chuẩn:** $< 0.02^\circ/\text{s}$.
-- **Chu kỳ lấy mẫu và lọc trạng thái:** $T_s = 5\text{ ms}$, tần số $200\text{ Hz}$.
+## 2. MPU-6050 Inertial Measurement Unit
+- **Mounting Position:** Elevated $60\text{ mm}$ above ground contact line; X-axis aligned longitudinally with bicycle roll axis, Y-axis aligned laterally.
+- **Nominal Static Balance Angle:** $+1.30^\circ$.
+- **Post-Calibration Stationary Gyro Bias Drift:** $< 0.02^\circ/\text{s}$.
+- **Sampling & State Estimation Period:** $T_s = 5\text{ ms}$ ($200\text{ Hz}$).
 
-## 3. Đặc Tính Động Cơ BLDC Nidec 24H Ở Điện Áp 12V
-- **Tín hiệu điều khiển:** PWM $20\text{ kHz}$ Active-Low; ngưỡng bắt đầu quay ứng với Duty Cycle $94.0\% - 94.5\%$.
-- **Độ phân giải Encoder tích hợp:** Đĩa từ $100\text{ xung/vòng}$, giải mã Quadrature $4\text{x}$ trên TIM3/TIM2 đạt $400\text{ PPR}$.
-- **Quan hệ tuyến tính giữa mức lệnh và tốc độ không tải tại $12\text{ V}$:**
-  - $1\% \rightarrow 111\text{ RPM}$
-  - $10\% \rightarrow 434\text{ RPM}$
-  - $30\% \rightarrow 989\text{ RPM}$
-  - $50\% \rightarrow 1560\text{ RPM}$
-  - $70\% \rightarrow 2180\text{ RPM}$
-  - $100\% \rightarrow 3136\text{ RPM}$ không tải, $2500\text{ RPM}$ có tải bánh đà
-- **Hệ số khuếch đại vận tốc tĩnh:** $K_v \approx 31.36\text{ RPM}/\%$.
-- **Dòng điện tiêu thụ:** $10\text{ mA} - 80\text{ mA}$ ở trạng thái xác lập; dòng đỉnh khi đảo chiều ở mức lệnh $30\%$ đạt $0.3\text{ A} - 0.5\text{ A}$.
+## 3. Nidec 24H BLDC Actuator Characteristics @ 12V Supply
+- **Control Signal:** $20\text{ kHz}$ active-low PWM; motor starts rotating at $94.0\% \dots 94.5\%$ duty cycle.
+- **Integrated Magnetic Encoder:** 100 pulses/revolution magnetic ring; $4\text{x}$ quadrature decoding on TIM3/TIM2 yields $400\text{ PPR}$.
+- **Linear Command vs. No-Load RPM at 12V:**
+  - $1\% \to 111\text{ RPM}$
+  - $10\% \to 434\text{ RPM}$
+  - $30\% \to 989\text{ RPM}$
+  - $50\% \to 1560\text{ RPM}$
+  - $70\% \to 2180\text{ RPM}$
+  - $100\% \to 3136\text{ RPM}$ (no load), $\approx 2500\text{ RPM}$ with reaction flywheel load
+- **Steady-State Velocity Gain:** $K_v \approx 31.36\text{ RPM}/\%$.
+- **Current Consumption:** $10\text{ mA} \dots 80\text{ mA}$ steady-state; transient peak during reversal at $30\%$ command reaches $0.3\text{ A} \dots 0.5\text{ A}$.
 
-## 4. Giới Hạn Sức Phản Điện Động Back-EMF Theo Điện Áp Nguồn
-- Tại điện áp $24\text{ V}$, vận tốc cực đại của Nidec 24H đạt $\approx 6000\text{ RPM}$; ở $1500\text{ RPM}$ sức phản điện động chiếm $25\%$ điện áp nguồn.
-- Tại điện áp $12\text{ V}$ của pin 3S, vận tốc cực đại giới hạn ở $3136\text{ RPM}$; khi vượt quá $1500\text{ RPM}$, sức phản điện động chiếm trên $50\%$ điện áp nguồn làm giảm biên độ gia tốc góc $\dot{\omega}$. Hệ thống do đó yêu cầu vòng điều khiển ngoài giữ tốc độ làm việc của bánh đà quanh vùng $0\text{ RPM}$.
+## 4. Back-EMF Voltage Saturation Constraints
+- Under rated $24\text{ V}$ operation, maximum no-load speed reaches $\approx 6000\text{ RPM}$; at $1500\text{ RPM}$, back-EMF accounts for only $25\%$ of supply voltage.
+- Under the $12\text{ V}$ supply of a 3S LiPo battery, top speed is capped at $3136\text{ RPM}$. Above $1500\text{ RPM}$, back-EMF exceeds $50\%$ of supply voltage, significantly attenuating angular acceleration torque $\dot{\omega}$. This physical constraint necessitates the outer momentum dumping loop to continuously drain flywheel speed back toward $0\text{ RPM}$.
