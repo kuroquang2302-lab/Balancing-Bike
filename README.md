@@ -1,4 +1,4 @@
-# Reaction Wheel Inverted Pendulum Self-Balancing Bicycle with Servo Steering
+# Reaction Wheel Self-Balancing Bicycle
 
 [![MATLAB Simulink](https://img.shields.io/badge/MATLAB-Simulink-orange.svg)](https://www.mathworks.com/)
 [![Target MCU](https://img.shields.io/badge/STM32-F411RE%20Nucleo--64-blue.svg)](https://www.st.com/)
