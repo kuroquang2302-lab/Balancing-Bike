@@ -24,24 +24,31 @@
       -webkit-user-select: none;
       -webkit-touch-callout: none;
       user-select: none;
+      touch-action: none;
     }
 
     html, body {
+      position: fixed;
+      inset: 0;
       margin: 0;
       padding: 0;
       width: 100%;
-      height: 100dvh;
+      height: 100%;
       overflow: hidden;
       overscroll-behavior: none;
+      -webkit-text-size-adjust: 100%;
       background: var(--bg);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
     .app {
+      position: fixed;
+      inset: 0;
       display: flex;
       flex-direction: column;
-      height: 100dvh;
+      width: 100%;
+      height: 100%;
       padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
       gap: 8px;
     }
@@ -284,16 +291,16 @@
       background: radial-gradient(circle at 35% 30%, #60a5fa, #2563eb);
       border: 2px solid #93c5fd;
       box-shadow: 0 4px 16px rgba(37, 99, 235, 0.45);
-      transform: translate(-50%, -50%);
+      transform: translate3d(-50%, -50%, 0);
+      will-change: transform;
       pointer-events: none;
-      transition: transform 0.09s ease-out;
+      transition: transform 0.08s ease-out;
     }
 
     .knob.active {
       transition: none;
       background: radial-gradient(circle at 35% 30%, #34d399, #059669);
       border-color: #a7f3d0;
-      box-shadow: 0 4px 18px rgba(16, 185, 129, 0.55);
     }
 
     .pad-grid-h {
@@ -430,17 +437,6 @@
 
     .hidden {
       display: none !important;
-    }
-
-    @media (max-width: 720px) and (orientation: portrait) {
-      .workspace {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto 1fr auto;
-      }
-      .rail-v {
-        max-height: 150px;
-        min-height: 130px;
-      }
     }
   </style>
 </head>
@@ -857,143 +853,214 @@
 
       function resetSteerVisual() {
         el.steerKnob.classList.remove('active');
-        el.steerKnob.style.transform = 'translate(-50%, -50%)';
+        el.steerKnob.style.transform = 'translate3d(-50%, -50%, 0)';
         state.str = 0;
         el.strOut.textContent = '0 deg';
       }
 
       function resetThrottleVisual() {
         el.thrKnob.classList.remove('active');
-        el.thrKnob.style.transform = 'translate(-50%, -50%)';
+        el.thrKnob.style.transform = 'translate3d(-50%, -50%, 0)';
         state.spd = 0;
         el.spdOut.textContent = '0%';
       }
 
-      // Single-axis joysticks lock perpendicular finger slip to eliminate accidental cross-inputs.
-      function setupHorizontalJoystick() {
-        var activePtr = null;
+      var lastTouchAt = 0;
 
-        function updateFromEvent(e) {
-          var rect = el.steerRail.getBoundingClientRect();
-          var maxTravel = Math.max(20, (rect.width - 74) / 2);
-          var dx = e.clientX - (rect.left + rect.width / 2);
-          if (dx > maxTravel) dx = maxTravel;
-          if (dx < -maxTravel) dx = -maxTravel;
-
-          var norm = dx / maxTravel;
-          el.steerKnob.style.transform = 'translate(calc(-50% + ' + dx.toFixed(1) + 'px), -50%)';
-
-          var deg = Math.abs(norm) < 0.12 ? 0 : Math.round(norm * MAX_STEER_DEG);
-          state.str = deg;
-          el.strOut.textContent = deg + ' deg';
-          queueDragAxis('str', deg);
+      function findTouchById(touchList, id) {
+        for (var i = 0; i < touchList.length; i++) {
+          if (touchList[i].identifier === id) return touchList[i];
         }
-
-        function release(e) {
-          if (activePtr === null || (e && e.pointerId !== activePtr)) return;
-          activePtr = null;
-          resetSteerVisual();
-          sendZeroAxis('str');
-        }
-
-        el.steerRail.addEventListener('pointerdown', function (e) {
-          e.preventDefault();
-          if (activePtr !== null) return;
-          activePtr = e.pointerId;
-          el.steerKnob.classList.add('active');
-          if (el.steerRail.setPointerCapture) {
-            try { el.steerRail.setPointerCapture(e.pointerId); } catch (_) {}
-          }
-          updateFromEvent(e);
-        });
-        el.steerRail.addEventListener('pointermove', function (e) {
-          if (e.pointerId !== activePtr) return;
-          e.preventDefault();
-          updateFromEvent(e);
-        });
-        el.steerRail.addEventListener('pointerup', release);
-        el.steerRail.addEventListener('pointercancel', release);
-        el.steerRail.addEventListener('lostpointercapture', release);
-
-        return release;
+        return null;
       }
 
-      function setupVerticalJoystick() {
-        var activePtr = null;
+      // Track each axis by Touch.identifier so left/right thumbs never stall each other on iOS WebView/Bluefy.
+      function setupAxisJoystick(cfg) {
+        var activeTouchId = null;
+        var mouseActive = false;
 
-        function updateFromEvent(e) {
-          var rect = el.thrRail.getBoundingClientRect();
-          var maxTravel = Math.max(20, (rect.height - 74) / 2);
-          var dy = e.clientY - (rect.top + rect.height / 2);
-          if (dy > maxTravel) dy = maxTravel;
-          if (dy < -maxTravel) dy = -maxTravel;
+        function updateFromPoint(clientX, clientY) {
+          var rect = cfg.rail.getBoundingClientRect();
+          var maxTravel = Math.max(20, ((cfg.vertical ? rect.height : rect.width) - 74) / 2);
+          var delta = cfg.vertical
+            ? (clientY - (rect.top + rect.height / 2))
+            : (clientX - (rect.left + rect.width / 2));
+          if (delta > maxTravel) delta = maxTravel;
+          if (delta < -maxTravel) delta = -maxTravel;
 
-          var norm = -dy / maxTravel;
-          el.thrKnob.style.transform = 'translate(-50%, calc(-50% + ' + dy.toFixed(1) + 'px))';
+          var norm = (cfg.vertical ? -delta : delta) / maxTravel;
+          var tx = cfg.vertical
+            ? 'translate3d(-50%, calc(-50% + ' + delta.toFixed(1) + 'px), 0)'
+            : 'translate3d(calc(-50% + ' + delta.toFixed(1) + 'px), -50%, 0)';
+          cfg.knob.style.transform = tx;
 
-          var pct = Math.abs(norm) < 0.12 ? 0 : Math.round(norm * state.gear);
-          state.spd = pct;
-          el.spdOut.textContent = (pct > 0 ? '+' : '') + pct + '%';
-          queueDragAxis('spd', pct);
+          var outVal = cfg.onNorm(norm);
+          queueDragAxis(cfg.axis, outVal);
         }
 
-        function release(e) {
-          if (activePtr === null || (e && e.pointerId !== activePtr)) return;
-          activePtr = null;
-          resetThrottleVisual();
-          sendZeroAxis('spd');
+        function releaseAll() {
+          if (activeTouchId === null && !mouseActive) return;
+          activeTouchId = null;
+          mouseActive = false;
+          cfg.resetVisual();
+          sendZeroAxis(cfg.axis);
         }
 
-        el.thrRail.addEventListener('pointerdown', function (e) {
+        cfg.rail.addEventListener('touchstart', function (e) {
           e.preventDefault();
-          if (activePtr !== null) return;
-          activePtr = e.pointerId;
-          el.thrKnob.classList.add('active');
-          if (el.thrRail.setPointerCapture) {
-            try { el.thrRail.setPointerCapture(e.pointerId); } catch (_) {}
-          }
-          updateFromEvent(e);
-        });
-        el.thrRail.addEventListener('pointermove', function (e) {
-          if (e.pointerId !== activePtr) return;
-          e.preventDefault();
-          updateFromEvent(e);
-        });
-        el.thrRail.addEventListener('pointerup', release);
-        el.thrRail.addEventListener('pointercancel', release);
-        el.thrRail.addEventListener('lostpointercapture', release);
+          lastTouchAt = Date.now();
+          if (activeTouchId !== null || e.changedTouches.length === 0) return;
+          var t = e.changedTouches[0];
+          activeTouchId = t.identifier;
+          cfg.knob.classList.add('active');
+          updateFromPoint(t.clientX, t.clientY);
+        }, { passive: false });
 
-        return release;
+        cfg.rail.addEventListener('touchmove', function (e) {
+          if (activeTouchId === null) return;
+          var t = findTouchById(e.changedTouches, activeTouchId) || findTouchById(e.touches, activeTouchId);
+          if (!t) return;
+          e.preventDefault();
+          updateFromPoint(t.clientX, t.clientY);
+        }, { passive: false });
+
+        function onTouchEnd(e) {
+          if (activeTouchId === null) return;
+          if (!findTouchById(e.changedTouches, activeTouchId)) return;
+          e.preventDefault();
+          releaseAll();
+        }
+
+        cfg.rail.addEventListener('touchend', onTouchEnd, { passive: false });
+        cfg.rail.addEventListener('touchcancel', onTouchEnd, { passive: false });
+
+        cfg.rail.addEventListener('mousedown', function (e) {
+          if (Date.now() - lastTouchAt < 700) return;
+          e.preventDefault();
+          mouseActive = true;
+          cfg.knob.classList.add('active');
+          updateFromPoint(e.clientX, e.clientY);
+        });
+
+        window.addEventListener('mousemove', function (e) {
+          if (!mouseActive) return;
+          updateFromPoint(e.clientX, e.clientY);
+        });
+
+        window.addEventListener('mouseup', function () {
+          if (!mouseActive) return;
+          releaseAll();
+        });
+
+        return releaseAll;
       }
 
       function bindHoldButton(btnId, pressCmd, relCmd, onUpdate) {
         var btn = document.getElementById(btnId);
-        var activePtr = null;
-        function rel(e) {
-          if (activePtr === null || (e && e.pointerId !== activePtr)) return;
-          activePtr = null;
+        var activeTouchId = null;
+        var mouseActive = false;
+
+        function releaseHold() {
+          if (activeTouchId === null && !mouseActive) return;
+          activeTouchId = null;
+          mouseActive = false;
           btn.classList.remove('held');
           onUpdate(false);
           if (state.connected) sendPriority(relCmd, false);
         }
-        btn.addEventListener('pointerdown', function (e) {
+
+        btn.addEventListener('touchstart', function (e) {
           e.preventDefault();
-          if (activePtr !== null) return;
-          activePtr = e.pointerId;
+          lastTouchAt = Date.now();
+          if (activeTouchId !== null || e.changedTouches.length === 0) return;
+          activeTouchId = e.changedTouches[0].identifier;
           btn.classList.add('held');
-          if (btn.setPointerCapture) {
-            try { btn.setPointerCapture(e.pointerId); } catch (_) {}
-          }
+          onUpdate(true);
+          sendPriority(pressCmd, false);
+        }, { passive: false });
+
+        function onTouchEnd(e) {
+          if (activeTouchId === null) return;
+          if (!findTouchById(e.changedTouches, activeTouchId)) return;
+          e.preventDefault();
+          releaseHold();
+        }
+
+        btn.addEventListener('touchend', onTouchEnd, { passive: false });
+        btn.addEventListener('touchcancel', onTouchEnd, { passive: false });
+
+        btn.addEventListener('mousedown', function (e) {
+          if (Date.now() - lastTouchAt < 700) return;
+          e.preventDefault();
+          mouseActive = true;
+          btn.classList.add('held');
           onUpdate(true);
           sendPriority(pressCmd, false);
         });
-        btn.addEventListener('pointerup', rel);
-        btn.addEventListener('pointercancel', rel);
-        btn.addEventListener('lostpointercapture', rel);
+
+        btn.addEventListener('mouseup', releaseHold);
+        btn.addEventListener('mouseleave', releaseHold);
       }
 
-      var releaseSteerJoy = setupHorizontalJoystick();
-      var releaseThrJoy = setupVerticalJoystick();
+      function bindFastTap(node, handler, immediateOnTouchStart) {
+        var touchId = null;
+        node.addEventListener('touchstart', function (e) {
+          e.preventDefault();
+          lastTouchAt = Date.now();
+          if (immediateOnTouchStart) {
+            handler();
+            return;
+          }
+          if (touchId === null && e.changedTouches.length > 0) {
+            touchId = e.changedTouches[0].identifier;
+          }
+        }, { passive: false });
+
+        node.addEventListener('touchend', function (e) {
+          e.preventDefault();
+          if (immediateOnTouchStart || touchId === null) return;
+          if (!findTouchById(e.changedTouches, touchId)) return;
+          touchId = null;
+          handler();
+        }, { passive: false });
+
+        node.addEventListener('touchcancel', function () {
+          touchId = null;
+        }, { passive: false });
+
+        node.addEventListener('click', function () {
+          if (Date.now() - lastTouchAt < 700) return;
+          handler();
+        });
+      }
+
+      var releaseSteerJoy = setupAxisJoystick({
+        axis: 'str',
+        vertical: false,
+        rail: el.steerRail,
+        knob: el.steerKnob,
+        resetVisual: resetSteerVisual,
+        onNorm: function (norm) {
+          var deg = Math.abs(norm) < 0.12 ? 0 : Math.round(norm * MAX_STEER_DEG);
+          state.str = deg;
+          el.strOut.textContent = deg + ' deg';
+          return deg;
+        }
+      });
+
+      var releaseThrJoy = setupAxisJoystick({
+        axis: 'spd',
+        vertical: true,
+        rail: el.thrRail,
+        knob: el.thrKnob,
+        resetVisual: resetThrottleVisual,
+        onNorm: function (norm) {
+          var pct = Math.abs(norm) < 0.12 ? 0 : Math.round(norm * state.gear);
+          state.spd = pct;
+          el.spdOut.textContent = (pct > 0 ? '+' : '') + pct + '%';
+          return pct;
+        }
+      });
 
       bindHoldButton('btnLeft', '!B71', '!B70', function (on) {
         state.str = on ? -MAX_STEER_DEG : 0;
@@ -1013,8 +1080,8 @@
       });
 
       el.btnConnect.addEventListener('click', connectOrDisconnect);
-      el.btnStatus.addEventListener('click', function () { sendPriority('STATUS\n', false); });
-      el.btnMode.addEventListener('click', function () {
+      bindFastTap(el.btnStatus, function () { sendPriority('STATUS\n', false); }, false);
+      bindFastTap(el.btnMode, function () {
         state.mode = state.mode === 'joy' ? 'pad' : 'joy';
         resetSteerVisual();
         resetThrottleVisual();
@@ -1023,25 +1090,25 @@
           sendZeroAxis('spd');
         }
         renderUI();
-      });
+      }, false);
 
-      el.btnEnable.addEventListener('click', function () {
+      bindFastTap(el.btnEnable, function () {
         var next = !state.enabled;
         state.enabled = next;
         renderUI();
         sendPriority('EN:' + (next ? '1' : '0') + '\n', false);
-      });
+      }, false);
 
-      el.btnEstop.addEventListener('click', function () {
+      bindFastTap(el.btnEstop, function () {
         state.enabled = false;
         resetSteerVisual();
         resetThrottleVisual();
         renderUI();
         sendPriority('STOP\n', true);
-      });
+      }, true);
 
       document.querySelectorAll('.tune-step').forEach(function (btn) {
-        btn.addEventListener('click', function () {
+        bindFastTap(btn, function () {
           var param = btn.getAttribute('data-param');
           var delta = parseFloat(btn.getAttribute('data-delta'));
           if (param === 'kp') {
@@ -1059,10 +1126,10 @@
               sendPriority(delta > 0 ? '!B41' : '!B31', false);
             }
           }
-        });
+        }, false);
       });
 
-      el.kpVal.addEventListener('click', function () {
+      bindFastTap(el.kpVal, function () {
         var raw = window.prompt('Nhap gia tri KP (0 - 200):', state.kp.toFixed(1));
         if (raw === null) return;
         var val = parseFloat(raw);
@@ -1071,9 +1138,9 @@
           renderUI();
           sendPriority('KP:' + state.kp.toFixed(1) + '\n', false);
         }
-      });
+      }, false);
 
-      el.kdVal.addEventListener('click', function () {
+      bindFastTap(el.kdVal, function () {
         var raw = window.prompt('Nhap gia tri KD (0 - 50):', state.kd.toFixed(2));
         if (raw === null) return;
         var val = parseFloat(raw);
@@ -1082,7 +1149,7 @@
           renderUI();
           sendPriority('KD:' + state.kd.toFixed(2) + '\n', false);
         }
-      });
+      }, false);
 
       function emergencyCenterControls() {
         var wasStr = state.str !== 0;
@@ -1097,6 +1164,10 @@
         }
       }
 
+      document.addEventListener('gesturestart', function (e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener('gesturechange', function (e) { e.preventDefault(); }, { passive: false });
+      window.addEventListener('orientationchange', emergencyCenterControls);
+      window.addEventListener('resize', emergencyCenterControls);
       window.addEventListener('blur', emergencyCenterControls);
       document.addEventListener('visibilitychange', function () {
         if (document.hidden) emergencyCenterControls();
