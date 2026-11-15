@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Balancing Bike BLE</title>
   <style>
     :root {
@@ -28,8 +28,6 @@
     }
 
     html, body {
-      position: fixed;
-      inset: 0;
       margin: 0;
       padding: 0;
       width: 100%;
@@ -43,13 +41,11 @@
     }
 
     .app {
-      position: fixed;
-      inset: 0;
       display: flex;
       flex-direction: column;
       width: 100%;
       height: 100%;
-      padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+      padding: 8px 12px;
       gap: 8px;
     }
 
@@ -1164,10 +1160,17 @@
         }
       }
 
+      function resetViewportAndControls() {
+        window.scrollTo(0, 0);
+        emergencyCenterControls();
+      }
+
       document.addEventListener('gesturestart', function (e) { e.preventDefault(); }, { passive: false });
       document.addEventListener('gesturechange', function (e) { e.preventDefault(); }, { passive: false });
-      window.addEventListener('orientationchange', emergencyCenterControls);
-      window.addEventListener('resize', emergencyCenterControls);
+      window.addEventListener('orientationchange', function () {
+        setTimeout(resetViewportAndControls, 60);
+      });
+      window.addEventListener('resize', resetViewportAndControls);
       window.addEventListener('blur', emergencyCenterControls);
       document.addEventListener('visibilitychange', function () {
         if (document.hidden) emergencyCenterControls();
