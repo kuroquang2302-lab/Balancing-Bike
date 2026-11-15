@@ -1,21 +1,20 @@
 classdef EncoderBlock_TIM3 < matlab.System ...
         & matlabshared.svd.BlockSampleTime ...
         & coder.ExternalDependency
-    % TIM3 hardware quadrature encoder driver on PA6 and PA7 for reaction wheel motor
+    % Khối đọc Encoder TIM3 (PA6, PA7) chuyên dụng cho Nidec 24H
     %#codegen
     %#ok<*EMCA>
 
     properties (Nontunable)
-        SampleTime = -1;
+        SampleTime = 0.005;
     end
 
     methods
         function obj = EncoderBlock_TIM3(varargin)
             coder.allowpcode('plain');
-            setProperties(obj, nargin, varargin{:});
+            setProperties(obj,nargin,varargin{:});
         end
-
-        function set.SampleTime(obj, newTime)
+        function set.SampleTime(obj,newTime)
             coder.extrinsic('error');
             coder.extrinsic('message');
             newTime = matlabshared.svd.internal.validateSampleTime(newTime);
@@ -23,7 +22,7 @@ classdef EncoderBlock_TIM3 < matlab.System ...
         end
     end
 
-    methods (Access = protected)
+    methods (Access=protected)
         function setupImpl(~)
             if ~isempty(coder.target)
                 coder.cinclude('soc_stm_encoder_tim3.h');
@@ -31,13 +30,13 @@ classdef EncoderBlock_TIM3 < matlab.System ...
             end
         end
 
-        function [EncoderCount, IndexCount, ValidIndex] = stepImpl(~)
+        function [EncoderCount,IndexCount,ValidIndex] = stepImpl(~)
             EncoderCount = uint16(0);
-            IndexCount   = uint16(0);
-            ValidIndex   = uint16(0);
+            IndexCount = uint16(0);
+            ValidIndex = uint16(0);
             if ~isempty(coder.target)
                 EncoderCount = coder.ceval('getEncoderCount_TIM3');
-                ValidIndex   = coder.ceval('getIndexCount_TIM3', coder.wref(IndexCount));
+                ValidIndex = coder.ceval('getIndexCount_TIM3',coder.wref(IndexCount));
             end
         end
 
@@ -55,11 +54,11 @@ classdef EncoderBlock_TIM3 < matlab.System ...
             num = 3;
         end
 
-        function flag = isOutputSizeLockedImpl(~, ~)
+        function flag = isOutputSizeLockedImpl(~,~)
             flag = true;
         end
 
-        function varargout = isOutputFixedSizeImpl(~, ~)
+        function varargout = isOutputFixedSizeImpl(~,~)
             varargout{1} = true;
             varargout{2} = true;
             varargout{3} = true;
@@ -72,9 +71,9 @@ classdef EncoderBlock_TIM3 < matlab.System ...
         end
 
         function varargout = getOutputSizeImpl(~)
-            varargout{1} = [1, 1];
-            varargout{2} = [1, 1];
-            varargout{3} = [1, 1];
+            varargout{1} = [1,1];
+            varargout{2} = [1,1];
+            varargout{3} = [1,1];
         end
 
         function varargout = getOutputDataTypeImpl(~)
@@ -84,11 +83,11 @@ classdef EncoderBlock_TIM3 < matlab.System ...
         end
 
         function icon = getIconImpl(~)
-            icon = sprintf('STM32 Nucleo\nEncoder TIM3\nPA6 / PA7');
+            icon = sprintf('STM32 Nucleo\nEncoder TIM3\n(PA6 / PA7)');
         end
     end
 
-    methods (Static, Access = protected)
+    methods (Static, Access=protected)
         function simMode = getSimulateUsingImpl(~)
             simMode = 'Interpreted execution';
         end
@@ -114,13 +113,17 @@ classdef EncoderBlock_TIM3 < matlab.System ...
                     'SampleTime', sampleTime, 'Offset', offset);
             end
         end
+    end
 
+    methods(Static, Access=protected)
         function header = getHeaderImpl()
-            header = matlab.system.display.Header(mfilename('class'), ...
+            header = matlab.system.display.Header(mfilename('class'),...
                 'ShowSourceLink', false, ...
-                'Title', 'STM32 Nucleo Encoder TIM3', ...
-                'Text', ['Hardware 4x Quadrature Encoder Counter on TIM3 peripheral.' newline ...
-                'Pin mapping: PA6 (Channel A), PA7 (Channel B).']);
+                'Title','STM32 Nucleo CUSTOM Encoder TIM3 (PA6 / PA7)', ...
+                'Text', ['Quadrature Encoder Mode 3 for TIM3 Nidec 24H.' newline ...
+                '- PA_6 = Encoder A (PURPLE)' newline ...
+                '- PA_7 = Encoder B (GREY)' newline ...
+                '- PA_8 (PWM).']);
         end
     end
 
@@ -135,10 +138,10 @@ classdef EncoderBlock_TIM3 < matlab.System ...
 
         function updateBuildInfo(buildInfo, context)
             if context.isCodeGenTarget('rtw')
-                srcDir     = fullfile(fileparts(mfilename('fullpath')), 'src');
-                includeDir = fullfile(fileparts(mfilename('fullpath')), 'include');
-                addIncludePaths(buildInfo, includeDir);
-                addSourceFiles(buildInfo, 'soc_stm_encoder_tim3.cpp', srcDir);
+                srcDir = fullfile(fileparts(mfilename('fullpath')),'src');
+                includeDir = fullfile(fileparts(mfilename('fullpath')),'include');
+                addIncludePaths(buildInfo,includeDir);
+                addSourceFiles(buildInfo,'soc_stm_encoder_tim3.cpp',srcDir);
             end
         end
     end

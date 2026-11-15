@@ -40,10 +40,10 @@ static BikeControlState g_bikeState = {
     0,
     30,
     25,
-    45.0f,
-    3.80f,
-    0.50f,
-    1.30f
+    46.0f,
+    2.00f,
+    0.036f,
+    -1.01f
 };
 
 static volatile bool g_bleConnected            = false;
@@ -298,8 +298,9 @@ static void parseTextCommand(const char *rawInput, size_t len)
     if (*start == '\0')
         return;
 
-    bool recognized  = true;
-    uint8_t beepMode = 0;
+    bool recognized         = true;
+    bool isContinuousMotion = false;
+    uint8_t beepMode        = 0;
 
     portENTER_CRITICAL(&g_stateMux);
     if (strcmp(start, "STOP") == 0 || strcmp(start, "ESTOP") == 0)
@@ -339,11 +340,13 @@ static void parseTextCommand(const char *rawInput, size_t len)
     {
         float v = parseAndClampFloat(start + 4, -100.0f, 100.0f, 0.0f);
         g_bikeState.drive_speed = (int8_t)lroundf(v);
+        isContinuousMotion      = true;
     }
     else if (strncmp(start, "STR:", 4) == 0)
     {
         float v = parseAndClampFloat(start + 4, -45.0f, 45.0f, 0.0f);
         g_bikeState.steer_angle = (int8_t)lroundf(v);
+        isContinuousMotion      = true;
     }
     else if (strncmp(start, "KP:", 3) == 0)
     {
@@ -377,13 +380,16 @@ static void parseTextCommand(const char *rawInput, size_t len)
 
     if (recognized)
     {
-        reportCurrentStatus(g_pendingReset ? "REBOOTING" : "OK");
+        if (!isContinuousMotion)
+        {
+            reportCurrentStatus(g_pendingReset ? "REBOOTING" : "OK");
+        }
     }
     else
     {
         char errMsg[96];
         snprintf(errMsg, sizeof(errMsg),
-                 "ERR: %s | Valid: EN:1 SPD:30 STR:0 KP:45 KD:3.8 TRIM:0.5 OFS:1.3 STOP RESET\n", start);
+                 "ERR: %s | Valid: EN:1 SPD:30 STR:0 KP:46.0 KD:2.00 TRIM:0.04 OFS:-1.01 STOP RESET\n", start);
         sendFeedbackToIOS(errMsg);
     }
 }
@@ -395,10 +401,10 @@ static void sendFrameToSTM32()
     snap = g_bikeState;
     portEXIT_CRITICAL(&g_stateMux);
 
-    uint16_t kp_u16    = (uint16_t)lroundf(clampFloat(snap.kp * 10.0f, 0.0f, 65535.0f, 450.0f));
-    uint16_t kd_u16    = (uint16_t)lroundf(clampFloat(snap.kd * 100.0f, 0.0f, 65535.0f, 380.0f));
-    uint16_t ktrim_u16 = (uint16_t)lroundf(clampFloat(snap.k_trim * 100.0f, 0.0f, 65535.0f, 50.0f));
-    int16_t ofs_i16    = (int16_t)lroundf(clampFloat(snap.nominal_ofs * 100.0f, -1000.0f, 1000.0f, 130.0f));
+    uint16_t kp_u16    = (uint16_t)lroundf(clampFloat(snap.kp * 10.0f, 0.0f, 65535.0f, 460.0f));
+    uint16_t kd_u16    = (uint16_t)lroundf(clampFloat(snap.kd * 100.0f, 0.0f, 65535.0f, 200.0f));
+    uint16_t ktrim_u16 = (uint16_t)lroundf(clampFloat(snap.k_trim * 100.0f, 0.0f, 65535.0f, 4.0f));
+    int16_t ofs_i16    = (int16_t)lroundf(clampFloat(snap.nominal_ofs * 100.0f, -1000.0f, 1000.0f, -101.0f));
 
     uint8_t frame[14];
     frame[0]  = 0xAA;

@@ -1,111 +1,68 @@
-# Reaction Wheel Inverted Pendulum Self-Balancing Bicycle with Servo Steering
-
-[![MATLAB Simulink](https://img.shields.io/badge/MATLAB-Simulink-orange.svg)](https://www.mathworks.com/)
-[![Target MCU](https://img.shields.io/badge/STM32-F411RE%20Nucleo--64-blue.svg)](https://www.st.com/)
-[![Wireless Co-Processor](https://img.shields.io/badge/ESP32--C3-BLE%205.0-red.svg)](https://www.espressif.com/)
-[![Actuator](https://img.shields.io/badge/BLDC-Nidec%2024H%2012V-green.svg)]()
-
-Embedded control system for a two-wheeled self-balancing bicycle incorporating a reaction wheel inverted pendulum and an MG995 servo steering mechanism. All signal filtering, state-machine calibration, and closed-loop control algorithms are modeled in MATLAB/Simulink at a $200\text{ Hz}$ sample rate ($5\text{ ms}$ discrete time-step) and compiled directly to an ARM Cortex-M4 STM32F411RE microcontroller. An auxiliary ESP32-C3 Super Mini co-processor handles BLE 5.0 wireless telemetry, live parameter tuning, and gamepad steering via an inter-MCU binary UART protocol.
+# Self-Balancing Bicycle on STM32 and MATLAB Simulink
 
 ![System Schematic](Schematic.png)
 
----
+## Overview
 
-## Technical Architecture
+This project takes mechanical inspiration from the three-dimensional printed self-balancing bicycle design by RemRC and adapts it into a friendly STM32F411RE and MATLAB Simulink control project. Instead of maintaining handwritten MATLAB scripts inside the model, the estimation, balancing, and motor driving logic run completely through native Simulink blocks at a fixed 200 hertz control rate.
 
-### 1. Dual-MCU Partitioning
-- **Real-Time Core (STM32F411RE @ 100 MHz):**
-  - Executes the time-critical $200\text{ Hz}$ deterministic balance loop with zero RTOS jitter.
-  - Manages independent hardware timers: `TIM1` (20 kHz PWM for flywheel and drive BLDC motors), `TIM3` (flywheel 4x quadrature encoder), `TIM2` (rear wheel 4x quadrature encoder), `TIM4` (50 Hz servo PWM), and `ADC1_IN4` (potentiometer feedback).
-- **Wireless Co-Processor (ESP32-C3 Super Mini @ 80 MHz):**
-  - Offloads the Bluetooth Low Energy (BLE 5.0) Nordic UART Service (NUS) stack to protect the STM32 from non-deterministic wireless interrupts.
-  - Packages iOS gamepad commands and terminal tuning strings into fixed 14-byte XOR-checksummed binary frames transmitted at 50 Hz over USART1.
-  - Features 3-tier thermal management (80 MHz CPU, 0 dBm RF, 60s Eco Standby, and 3-minute duty-cycled hibernation) with acoustic buzzer feedback.
+Moving from script code to native visual blocks makes signal flow easy to inspect, allows live parameter tuning inside Simulink, and generates deterministic C code directly for the STM32F411RE Nucleo-64 microcontroller.
 
-### 2. Cascaded Two-Loop Balance Controller
-- **Inner Balance Loop ($200\text{ Hz}$):**
-  - Combines non-linear gravity feedforward $u_{\text{grav}} = -K_g \sin(e)$, roll angle PID with anti-windup clamping ($\pm 25.0\%$), and flywheel angular velocity damping.
-  - Integrated slew-rate limiter ($\Delta u \le 8.0\% / 5\text{ ms}$) prevents high-frequency chattering and protects motor drive circuitry.
-  - Soft linear power derating between $2500\text{ RPM}$ and $3000\text{ RPM}$ avoids voltage saturation caused by motor back-EMF.
-- **Outer Momentum Dumping Loop:**
-  - Dynamically trims the roll balance setpoint ($\dot{\theta}_{\text{offset}} = -K_{\text{trim}} \omega_{\text{wheel}} / 1000$) using TIM3 encoder velocity feedback.
-  - Automatically compensates for physical center-of-mass shifts and drains flywheel momentum back toward $0\text{ RPM}$.
+## Upgrade to Native Simulink Blocks
 
-### 3. Nidec 24H BLDC Actuator Interface
-- Active-low $20\text{ kHz}$ PWM with deadband compensation starting at $94.5\%$ duty cycle.
-- 1-sample power blanking ($100\%$ duty cycle for $5\text{ ms}$) on direction reversal (`DIR`) suppresses inductive voltage spikes on the internal H-bridge.
-- Two-stage electromagnetic braking (`BRAKE` pin): 0.5s freewheel coasting before hard brake engagement.
+Earlier versions placed sensor filtering, balance equations, and motor logic inside custom MATLAB Function code blocks. That approach hid internal states and slowed down tuning on real hardware.
 
-### 4. MPU-6050 Adaptive State Estimator
-- 1D Kalman filter estimates roll angle and X-axis angular velocity over $400\text{ kHz}$ Fast-Mode I2C.
-- Initial 200-sample stationary gyro bias calibration with busy flag signaling (`Gyro_X_Rate = 999.0`).
-- Adaptive measurement noise covariance ($R$) dynamically scales up to 10x during high total acceleration ($|\mathbf{a}| \ne 1g$) to reject centripetal and tangential disturbances.
+The upgraded model replaces every custom script block with standard Simulink math, logic, discrete filter, relay, and saturation blocks inside `TESTMOSTHARDWARE.slx`. Every intermediate signal can now be monitored in real time while the controller gains are adjusted directly from the Simulink workspace.
 
----
+## Algorithms Behind the Blocks
 
-## Hardware Specifications
+### Motion Estimation and Filtering
 
-| Subsystem | Component / Parameter | Specification |
+The inertial sensor subsystem reads raw accelerometer and gyroscope bytes from the MPU6050 sensor every 5 milliseconds over the two-wire sensor bus. Signed measurements are scaled into physical units, and lateral tilt is computed from acceleration components through an inverse tangent operation.
+
+A complementary filter combines 99 percent integrated gyroscope angular rate with 1 percent accelerometer tilt angle to track lean without drifting or picking up wheel vibration. In parallel, raw angular velocity passes through a first-order discrete low-pass filter so derivative control stays smooth and free of mechanical chatter.
+
+### Dual-Loop Cascade Trim Controller
+
+The inner balance loop applies proportional and derivative feedback on roll angle error and filtered angular velocity, paired with light flywheel speed damping. This loop delivers immediate reaction torque whenever the bicycle leans away from vertical.
+
+An outer cascade trim loop passes flywheel velocity through a slow discrete low-pass filter and ignores small speed jitter inside a deadzone around zero revolutions per minute. When the physical center of gravity shifts away from the nominal angle, residual wheel speed integrates slowly into a bounded balance offset within negative 1.5 to positive 1.5 degrees. Gravity then helps slow the flywheel back toward zero speed.
+
+For safe startup and recovery, an arming hysteresis relay activates balancing only when the bicycle enters a tight band near vertical and disarms cleanly if tilt exceeds safety bounds. An anti-windup gate freezes the learned trim offset during saturation or brief recoveries until balancing is turned off manually.
+
+### Motor Driver Conditioning
+
+The flywheel driver subsystem converts signed control commands into active-low pulse width modulation at 20 kilohertz, compensating for the internal motor deadband starting at 94.5 percent duty cycle. Whenever the commanded rotation reverses direction, logic blocks hold motor power at zero for one 5 millisecond sample before toggling direction to protect the internal motor electronics.
+
+### Hardware Encoders and Wireless Bridge
+
+Dedicated C++ System Object blocks configure Timer 3 and Timer 2 in four-times hardware quadrature encoder mode for zero-overhead wheel speed feedback. Wireless phone control and telemetry run separately on an ESP32-C3 Super Mini board over Bluetooth Low Energy, forwarding fixed 14-byte packets with exclusive-or error checking to the STM32 hardware serial port via direct memory access.
+
+## Hardware Components
+
+| Subsystem | Component | Role |
 | :--- | :--- | :--- |
-| **Main Processing Core** | STM32F411RE Nucleo-64 | ARM Cortex-M4 @ 100 MHz, 512 KB Flash, 128 KB SRAM |
-| **Wireless Co-Processor** | ESP32-C3 Super Mini | RISC-V @ 80 MHz, BLE 5.0 NUS, 3.3V Logic |
-| **Flywheel Actuator** | Nidec 24H 12V BLDC | Internal driver, 20 kHz PWM, direction & brake inputs |
-| **Rear Drive Actuator** | Nidec 24H 12V BLDC | GT2 belt transmission (6 mm width, 240 mm loop) |
-| **Steering Actuator** | TowerPro MG995 | Metal gear servo, 50 Hz PWM, 1.0 ms - 2.0 ms pulse width |
-| **Inertial Measurement** | MPU-6050 6-DOF IMU | Mounted at 60 mm height, X-axis aligned with bike roll |
-| **Reaction Flywheel** | 3D-Printed Rim-Weighted | Mass: $100\text{ g}$, Diameter: $130\text{ mm}$, $J = 3.1 \times 10^{-4}\text{ kg}\cdot\text{m}^2$ |
-| **Total System Mass** | Chassis + Electronics + LiPo | $750\text{ g} - 800\text{ g}$ |
-| **Power Supply** | 3S LiPo Battery (11.1V - 12.6V) | Direct 12V for BLDC motors; 5V 3A DC-DC Buck for MCUs & Servo |
-
----
+| Main controller | STM32F411RE Nucleo-64 | Executes the 200 hertz Simulink control loop |
+| Wireless bridge | ESP32-C3 Super Mini | Manages Bluetooth Low Energy communication |
+| Reaction flywheel | Nidec 24H brushless motor | Produces balancing torque along the roll axis |
+| Rear wheel drive | Nidec 24H brushless motor | Drives forward and backward motion |
+| Front steering | TowerPro MG995 servo | Controls front fork steering angle |
+| Motion sensor | MPU6050 module | Measures acceleration and roll angular rate |
+| Power supply | Three-cell lithium polymer battery | Powers motors directly and electronics at 5 volts |
 
 ## Repository Structure
 
-```text
-Balancing-Bike/
-├── README.md                              # System architecture and technical overview
-├── Schematic.png                          # Hardware wiring and inter-MCU schematic diagram
-├── .gitignore                             # PlatformIO and MATLAB build exclusions
-├── docs/
-│   ├── references.md                      # Detailed technical analysis of benchmark literature
-│   ├── hardware/
-│   │   ├── pinouts.md                     # STM32F411RE pin allocation and power distribution
-│   │   └── ble_connection.md              # ESP32-C3 BLE service, protocol, and command specifications
-│   ├── theory/
-│   │   └── dual_loop_control.md           # Equations of motion and two-loop control derivation
-│   └── project_notes/
-│       ├── decisions.md                   # Architecture Decision Records (ADR-001 to ADR-012)
-│       ├── key_facts.md                   # Physical constants, actuator benchmarks, and motor parameters
-│       ├── bugs.md                        # Root-cause bug analyses and engineering resolutions
-│       └── issues.md                      # Development milestones and subsystem roadmap
-└── src/
-    ├── controllers/
-    │   └── fcn_Balance_Controller.m       # Two-loop balance controller MATLAB function block
-    ├── drivers/
-    │   └── fcn_Nidec_Driver.m             # Nidec 24H 20 kHz PWM, direction, and braking driver block
-    ├── filters/
-    │   └── fcn_MPU6050_Filter.m           # Adaptive 1D Kalman filter block for MPU-6050
-    ├── hal/
-    │   ├── EncoderBlock_TIM3.m            # MATLAB System Object for TIM3 hardware encoder
-    │   ├── Setup_Encoder_TIM2.m           # Setup script generating C++ register driver for TIM2
-    │   ├── Setup_Encoder_TIM3.m           # Setup script generating C++ register driver for TIM3
-    │   ├── include/soc_stm_encoder_tim3.h # TIM3 hardware encoder header
-    │   └── src/soc_stm_encoder_tim3.cpp   # STM32 register implementation for TIM3 encoder
-    └── esp32_ble_bridge/
-        ├── platformio.ini                 # PlatformIO build configuration for ESP32-C3 Super Mini
-        └── src/
-            └── main.cpp                   # BLE 5.0 bridge firmware, command parser, and UART transmitter
-```
+- File `TESTMOSTHARDWARE.slx` contains the complete pure-block Simulink model ready for hardware testing.
+- Folder `src/hal` holds the hardware abstraction blocks and low-level C++ register drivers for encoders and wireless serial communication.
+- Folder `src/esp32_ble_bridge` holds the PlatformIO firmware for the ESP32-C3 Super Mini wireless bridge.
+- Folder `docs` contains pin assignments, wireless protocol documentation, and background design notes.
 
----
+## Quick Start
 
-## Credits & Inspirations
+1. Open MATLAB and add `src/hal` along with its subfolders to the MATLAB path.
+2. Open `TESTMOSTHARDWARE.slx` in Simulink.
+3. Connect the STM32F411RE Nucleo-64 board through a universal serial bus cable and click Monitor and Tune for live tuning, or click Build, Deploy and Start for standalone battery operation.
 
-- **Tom Stanton** - Reaction wheel dynamics, angular velocity saturation boundaries, and zero-crossing reversal dynamics.
-- **Every Flavor of Robot** - Field Oriented Control (FOC) torque considerations and outer-loop dynamic setpoint shifting for momentum dumping.
-- **James Bruton** - Comparative analysis between reaction wheels and control moment gyroscopes; derivation of torque proportional to control derivative ($\tau \propto \dot{u}$) on velocity-mode BLDC drivers.
-- **Sydney Madueke** - Inertia ratio optimization and steady-state angle error elimination via anti-windup integration.
-- **RemRC** - Mechanical CAD baseline for the 3D-printed balancing bicycle, Nidec 24H packaging, and Arduino Nano proof-of-concept.
-- **BD594 (James Cochrane)** - Nidec 24H open-drain encoder pull-up circuit configuration and inductive transient protection diodes.
-- **Dmitrii Tomin** - Standardized 23-step mechanical assembly workflow and optimized 3D-printing tolerances.
-- **Journal of Fuzzy Systems and Control (2024)** - Comparative benchmark study (*PID Control for Balancing Bike Model using Reaction Wheel*, Vol. 2, No. 2) analyzing single-loop vs. cascaded velocity-feedback architectures.
+## Credits
+
+Mechanical geometry and three-dimensional printable frame concepts are adapted from RemRC. Reaction wheel modeling, encoder interfacing, and hardware protection practices draw from Tom Stanton, James Bruton, Sydney Madueke, Every Flavor of Robot, BD594, and Dmitrii Tomin.

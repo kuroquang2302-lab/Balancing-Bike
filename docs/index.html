@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Balancing Bike BLE</title>
+  <style>
+    :root {
+      --bg: #0d131c;
+      --panel: #151e2b;
+      --panel-alt: #1c2738;
+      --border: #2a3950;
+      --text: #e8eef7;
+      --muted: #8fa3bf;
+      --blue: #3b82f6;
+      --green: #10b981;
+      --red: #ef4444;
+      --amber: #f59e0b;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      overscroll-behavior: none;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+      gap: 8px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 6px 10px;
+      flex-shrink: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--red);
+      flex-shrink: 0;
+    }
+
+    .dot.ok {
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+    }
+
+    .conn-text {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .telemetry {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .metric {
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px 9px;
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+    }
+
+    .metric .lbl {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .metric .val {
+      font-size: 14px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .state-pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #273244;
+      color: var(--muted);
+    }
+
+    .state-pill.armed {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.5);
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    button {
+      border: 1px solid var(--border);
+      background: var(--panel-alt);
+      color: var(--text);
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    button:active {
+      transform: scale(0.97);
+    }
+
+    .btn-sm {
+      padding: 7px 11px;
+      font-size: 13px;
+    }
+
+    .btn-primary {
+      background: var(--blue);
+      border-color: #60a5fa;
+      color: #fff;
+    }
+
+    .btn-s {
+      background: #1e3a5f;
+      border-color: #3b82f6;
+      min-width: 38px;
+    }
+
+    .workspace {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1fr 1.25fr 1fr;
+      gap: 10px;
+    }
+
+    .zone {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 0;
+    }
+
+    .zone-title {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .zone-readout {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .rail-wrap {
+      flex: 1;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 0;
+      min-height: 0;
+    }
+
+    .rail-h {
+      position: relative;
+      width: 100%;
+      max-width: 290px;
+      height: 82px;
+      border-radius: 42px;
+      background: #0b1118;
+      border: 2px solid var(--border);
+      touch-action: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .rail-v {
+      position: relative;
+      width: 96px;
+      height: 100%;
+      max-height: 240px;
+      min-height: 150px;
+      border-radius: 48px;
+      background: #0b1118;
+      border: 2px solid var(--border);
+      touch-action: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .center-mark-h {
+      position: absolute;
+      left: 50%;
+      top: 14px;
+      bottom: 14px;
+      width: 2px;
+      background: #2f415a;
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    .center-mark-v {
+      position: absolute;
+      top: 50%;
+      left: 16px;
+      right: 16px;
+      height: 2px;
+      background: #2f415a;
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+
+    .knob {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 66px;
+      height: 66px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #60a5fa, #2563eb);
+      border: 2px solid #93c5fd;
+      box-shadow: 0 4px 16px rgba(37, 99, 235, 0.45);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      transition: transform 0.09s ease-out;
+    }
+
+    .knob.active {
+      transition: none;
+      background: radial-gradient(circle at 35% 30%, #34d399, #059669);
+      border-color: #a7f3d0;
+      box-shadow: 0 4px 18px rgba(16, 185, 129, 0.55);
+    }
+
+    .pad-grid-h {
+      width: 100%;
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      padding: 8px 0;
+    }
+
+    .pad-grid-v {
+      width: 100%;
+      flex: 1;
+      display: grid;
+      grid-template-rows: 1fr 1fr;
+      gap: 14px;
+      padding: 4px 0;
+    }
+
+    .pad-btn {
+      font-size: 18px;
+      border-radius: 14px;
+      border: 2px solid var(--border);
+      background: var(--panel-alt);
+      touch-action: none;
+      min-height: 70px;
+    }
+
+    .pad-btn.held {
+      background: var(--blue);
+      border-color: #93c5fd;
+      color: #fff;
+    }
+
+    .center-zone {
+      gap: 8px;
+      justify-content: space-between;
+    }
+
+    .power-row {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .btn-enable {
+      padding: 12px 8px;
+      font-size: 14px;
+      background: #14362d;
+      border-color: #10b981;
+      color: #6ee7b7;
+    }
+
+    .btn-enable.on {
+      background: var(--green);
+      color: #052e22;
+      border-color: #a7f3d0;
+    }
+
+    .btn-estop {
+      padding: 12px 8px;
+      font-size: 16px;
+      background: #b91c1c;
+      border-color: #f87171;
+      color: #fff;
+      letter-spacing: 0.5px;
+    }
+
+    .btn-estop:active {
+      background: #ef4444;
+    }
+
+    .tune-list {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .tune-row {
+      display: grid;
+      grid-template-columns: 56px 46px 1fr 46px;
+      align-items: center;
+      gap: 6px;
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 4px 6px;
+    }
+
+    .tune-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+      padding-left: 4px;
+    }
+
+    .tune-step {
+      height: 36px;
+      font-size: 18px;
+      border-radius: 8px;
+      background: #243247;
+    }
+
+    .tune-val {
+      text-align: center;
+      font-size: 15px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      cursor: pointer;
+      padding: 6px 4px;
+      border-radius: 6px;
+    }
+
+    .tune-val:active {
+      background: #27374f;
+    }
+
+    .log-bar {
+      width: 100%;
+      font-size: 11px;
+      color: var(--muted);
+      background: #0b1118;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 5px 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 720px) and (orientation: portrait) {
+      .workspace {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr auto;
+      }
+      .rail-v {
+        max-height: 150px;
+        min-height: 130px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span id="bleDot" class="dot"></span>
+        <span id="bleLabel" class="conn-text">Chua ket noi</span>
+      </div>
+
+      <div class="telemetry">
+        <div class="metric"><span class="lbl">Roll</span><span id="valRoll" class="val">--</span></div>
+        <div class="metric"><span class="lbl">RPM</span><span id="valRpm" class="val">--</span></div>
+        <div class="metric"><span class="lbl">Ofs</span><span id="valOfs" class="val">--</span></div>
+        <span id="armBadge" class="state-pill">STANDBY</span>
+      </div>
+
+      <div class="top-actions">
+        <button id="btnStatus" class="btn-sm btn-s" title="Bao nhanh trang thai">S</button>
+        <button id="btnMode" class="btn-sm">Pad</button>
+        <button id="btnConnect" class="btn-sm btn-primary">Ket noi</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="zone">
+        <div class="zone-title">
+          <span>LAI TRAI / PHAI</span>
+          <span id="strOut" class="zone-readout">0 deg</span>
+        </div>
+
+        <div id="steerJoyWrap" class="rail-wrap">
+          <div id="steerRail" class="rail-h">
+            <span>L</span>
+            <div class="center-mark-h"></div>
+            <div id="steerKnob" class="knob"></div>
+            <span>R</span>
+          </div>
+        </div>
+
+        <div id="steerPadWrap" class="pad-grid-h hidden">
+          <button id="btnLeft" class="pad-btn">&#9664; TRAI</button>
+          <button id="btnRight" class="pad-btn">PHAI &#9654;</button>
+        </div>
+
+        <div class="zone-title"><span>Goc toi da: 25 deg</span><span>Truc ngang</span></div>
+      </section>
+
+      <section class="zone center-zone">
+        <div class="power-row">
+          <button id="btnEnable" class="btn-enable">BAT CAN BANG</button>
+          <button id="btnEstop" class="btn-estop">E-STOP</button>
+        </div>
+
+        <div class="tune-list">
+          <div class="tune-row">
+            <span class="tune-name">KP</span>
+            <button class="tune-step" data-param="kp" data-delta="-0.5">-</button>
+            <div id="kpVal" class="tune-val" title="Cham de nhap so">46.0</div>
+            <button class="tune-step" data-param="kp" data-delta="0.5">+</button>
+          </div>
+          <div class="tune-row">
+            <span class="tune-name">KD</span>
+            <button class="tune-step" data-param="kd" data-delta="-0.05">-</button>
+            <div id="kdVal" class="tune-val" title="Cham de nhap so">2.00</div>
+            <button class="tune-step" data-param="kd" data-delta="0.05">+</button>
+          </div>
+          <div class="tune-row">
+            <span class="tune-name">GA</span>
+            <button class="tune-step" data-param="gear" data-delta="-10">-</button>
+            <div id="gearVal" class="tune-val">30%</div>
+            <button class="tune-step" data-param="gear" data-delta="10">+</button>
+          </div>
+        </div>
+
+        <div id="logBar" class="log-bar">San sang. Bam Ket noi -> BalancingBike-C3</div>
+      </section>
+
+      <section class="zone">
+        <div class="zone-title">
+          <span>TIEN / LUI</span>
+          <span id="spdOut" class="zone-readout">0%</span>
+        </div>
+
+        <div id="thrJoyWrap" class="rail-wrap">
+          <div id="thrRail" class="rail-v">
+            <span>+</span>
+            <div class="center-mark-v"></div>
+            <div id="thrKnob" class="knob"></div>
+            <span>-</span>
+          </div>
+        </div>
+
+        <div id="thrPadWrap" class="pad-grid-v hidden">
+          <button id="btnFwd" class="pad-btn">&#9650; TIEN</button>
+          <button id="btnRev" class="pad-btn">&#9660; LUI</button>
+        </div>
+
+        <div class="zone-title"><span>Truc doc</span><span id="gearHint">Max: 30%</span></div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var NUS_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+      var NUS_RX_CHAR = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+      var NUS_TX_CHAR = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+
+      var MAX_STEER_DEG = 25;
+      var WRITE_PACE_MS = 25;
+      var DRAG_PACE_MS = 50;
+      var encoder = new TextEncoder();
+      var decoder = new TextDecoder();
+
+      var state = {
+        connected: false,
+        enabled: false,
+        kp: 46.0,
+        kd: 2.00,
+        gear: 30,
+        mode: 'joy',
+        spd: 0,
+        str: 0
+      };
+
+      var bleDevice = null;
+      var rxChar = null;
+      var txChar = null;
+      var rxBuffer = '';
+
+      // TX scheduler keeps discrete commands ordered and coalesces rapid joystick drags.
+      var priorityQueue = [];
+      var pendingDrag = { spd: null, str: null };
+      var lastSentDrag = { spd: 0, str: 0, spdAt: 0, strAt: 0 };
+      var txBusy = false;
+      var txTimer = null;
+
+      var el = {
+        bleDot: document.getElementById('bleDot'),
+        bleLabel: document.getElementById('bleLabel'),
+        valRoll: document.getElementById('valRoll'),
+        valRpm: document.getElementById('valRpm'),
+        valOfs: document.getElementById('valOfs'),
+        armBadge: document.getElementById('armBadge'),
+        btnConnect: document.getElementById('btnConnect'),
+        btnStatus: document.getElementById('btnStatus'),
+        btnMode: document.getElementById('btnMode'),
+        btnEnable: document.getElementById('btnEnable'),
+        btnEstop: document.getElementById('btnEstop'),
+        kpVal: document.getElementById('kpVal'),
+        kdVal: document.getElementById('kdVal'),
+        gearVal: document.getElementById('gearVal'),
+        gearHint: document.getElementById('gearHint'),
+        strOut: document.getElementById('strOut'),
+        spdOut: document.getElementById('spdOut'),
+        logBar: document.getElementById('logBar'),
+        steerJoyWrap: document.getElementById('steerJoyWrap'),
+        steerPadWrap: document.getElementById('steerPadWrap'),
+        thrJoyWrap: document.getElementById('thrJoyWrap'),
+        thrPadWrap: document.getElementById('thrPadWrap'),
+        steerRail: document.getElementById('steerRail'),
+        steerKnob: document.getElementById('steerKnob'),
+        thrRail: document.getElementById('thrRail'),
+        thrKnob: document.getElementById('thrKnob')
+      };
+
+      function setLog(msg) {
+        el.logBar.textContent = msg;
+      }
+
+      function renderUI() {
+        el.bleDot.classList.toggle('ok', state.connected);
+        el.bleLabel.textContent = state.connected ? 'BalancingBike-C3' : 'Chua ket noi';
+        el.btnConnect.textContent = state.connected ? 'Ngat' : 'Ket noi';
+
+        el.btnEnable.classList.toggle('on', state.enabled);
+        el.btnEnable.textContent = state.enabled ? 'TAT CAN BANG' : 'BAT CAN BANG';
+
+        el.kpVal.textContent = state.kp.toFixed(1);
+        el.kdVal.textContent = state.kd.toFixed(2);
+        el.gearVal.textContent = state.gear + '%';
+        el.gearHint.textContent = 'Max: ' + state.gear + '%';
+
+        el.strOut.textContent = state.str + ' deg';
+        el.spdOut.textContent = (state.spd > 0 ? '+' : '') + state.spd + '%';
+
+        var isJoy = state.mode === 'joy';
+        el.btnMode.textContent = isJoy ? 'Pad' : 'Joy';
+        el.steerJoyWrap.classList.toggle('hidden', !isJoy);
+        el.steerPadWrap.classList.toggle('hidden', isJoy);
+        el.thrJoyWrap.classList.toggle('hidden', !isJoy);
+        el.thrPadWrap.classList.toggle('hidden', isJoy);
+      }
+
+      function sleep(ms) {
+        return new Promise(function (resolve) { setTimeout(resolve, ms); });
+      }
+
+      async function writeBleRaw(cmd) {
+        if (!rxChar) return;
+        var bytes = encoder.encode(cmd);
+        if (rxChar.properties && rxChar.properties.writeWithoutResponse && typeof rxChar.writeValueWithoutResponse === 'function') {
+          await rxChar.writeValueWithoutResponse(bytes);
+        } else {
+          await rxChar.writeValue(bytes);
+        }
+      }
+
+      function scheduleTxPump(delayMs) {
+        if (txBusy || txTimer) return;
+        txTimer = setTimeout(function () {
+          txTimer = null;
+          pumpTx();
+        }, delayMs || 0);
+      }
+
+      async function pumpTx() {
+        if (txBusy || !state.connected || !rxChar) return;
+        txBusy = true;
+        try {
+          while (state.connected && rxChar) {
+            if (priorityQueue.length > 0) {
+              var cmd = priorityQueue.shift();
+              await writeBleRaw(cmd);
+              await sleep(WRITE_PACE_MS);
+              continue;
+            }
+
+            var now = Date.now();
+            var sentSomething = false;
+
+            if (pendingDrag.str !== null && (now - lastSentDrag.strAt >= DRAG_PACE_MS)) {
+              var strVal = pendingDrag.str;
+              pendingDrag.str = null;
+              lastSentDrag.str = strVal;
+              lastSentDrag.strAt = now;
+              await writeBleRaw('STR:' + strVal + '\n');
+              await sleep(WRITE_PACE_MS);
+              sentSomething = true;
+            }
+
+            if (priorityQueue.length === 0 && pendingDrag.spd !== null && (now - lastSentDrag.spdAt >= DRAG_PACE_MS)) {
+              var spdVal = pendingDrag.spd;
+              pendingDrag.spd = null;
+              lastSentDrag.spd = spdVal;
+              lastSentDrag.spdAt = now;
+              await writeBleRaw('SPD:' + spdVal + '\n');
+              await sleep(WRITE_PACE_MS);
+              sentSomething = true;
+            }
+
+            if (!sentSomething) {
+              if (pendingDrag.str !== null || pendingDrag.spd !== null) {
+                var waitStr = pendingDrag.str !== null ? Math.max(5, DRAG_PACE_MS - (Date.now() - lastSentDrag.strAt)) : 999;
+                var waitSpd = pendingDrag.spd !== null ? Math.max(5, DRAG_PACE_MS - (Date.now() - lastSentDrag.spdAt)) : 999;
+                scheduleTxPump(Math.min(waitStr, waitSpd));
+              }
+              break;
+            }
+          }
+        } catch (err) {
+          setLog('Loi gui BLE: ' + err.message);
+        } finally {
+          txBusy = false;
+          if (priorityQueue.length > 0 && state.connected) {
+            scheduleTxPump(WRITE_PACE_MS);
+          }
+        }
+      }
+
+      function sendPriority(cmd, flushAll) {
+        if (!state.connected || !rxChar) {
+          setLog('Chua ket noi BLE');
+          return;
+        }
+        if (flushAll) {
+          priorityQueue.length = 0;
+          pendingDrag.spd = null;
+          pendingDrag.str = null;
+        }
+        priorityQueue.push(cmd);
+        scheduleTxPump(0);
+      }
+
+      function sendZeroAxis(axis) {
+        if (axis === 'str') {
+          pendingDrag.str = null;
+          lastSentDrag.str = 0;
+          lastSentDrag.strAt = Date.now();
+          if (state.connected) sendPriority('STR:0\n', false);
+        } else {
+          pendingDrag.spd = null;
+          lastSentDrag.spd = 0;
+          lastSentDrag.spdAt = Date.now();
+          if (state.connected) sendPriority('SPD:0\n', false);
+        }
+      }
+
+      function queueDragAxis(axis, value) {
+        if (!state.connected) return;
+        if (axis === 'str') {
+          if (value === 0 && lastSentDrag.str !== 0) {
+            sendZeroAxis('str');
+            return;
+          }
+          if (Math.abs(value - lastSentDrag.str) < 2 && value !== MAX_STEER_DEG && value !== -MAX_STEER_DEG) {
+            return;
+          }
+          pendingDrag.str = value;
+        } else {
+          if (value === 0 && lastSentDrag.spd !== 0) {
+            sendZeroAxis('spd');
+            return;
+          }
+          if (Math.abs(value - lastSentDrag.spd) < 2 && value !== state.gear && value !== -state.gear) {
+            return;
+          }
+          pendingDrag.spd = value;
+        }
+        scheduleTxPump(0);
+      }
+
+      function parseLine(line) {
+        if (!line) return;
+        if (line.indexOf('[STM32]') === 0) {
+          var m = line.match(/A:([-\d.]+)\s+R:([-\d]+)\s+O:([-\d.]+)\s+E:([01])/);
+          if (m) {
+            el.valRoll.textContent = m[1] + '°';
+            el.valRpm.textContent = m[2];
+            el.valOfs.textContent = m[3] + '°';
+            var armed = m[4] === '1';
+            el.armBadge.textContent = armed ? 'ARMED' : 'STANDBY';
+            el.armBadge.classList.toggle('armed', armed);
+            return;
+          }
+        }
+
+        var st = line.match(/EN:([01])\s+SPD:([-\d]+)\s+GEAR:(\d+)\s+STR:([-\d]+)\s+KP:([\d.]+)\s+KD:([\d.]+)\s+TRIM:([\d.]+)\s+OFS:([-\d.]+)/);
+        if (st) {
+          state.enabled = st[1] === '1';
+          state.gear = parseInt(st[3], 10);
+          state.kp = parseFloat(st[5]);
+          state.kd = parseFloat(st[6]);
+          el.valOfs.textContent = st[8] + '°';
+          renderUI();
+        }
+        setLog(line);
+      }
+
+      function onNotify(event) {
+        rxBuffer += decoder.decode(event.target.value, { stream: true });
+        var idx;
+        while ((idx = rxBuffer.indexOf('\n')) >= 0) {
+          var line = rxBuffer.slice(0, idx).replace(/\r/g, '').trim();
+          rxBuffer = rxBuffer.slice(idx + 1);
+          parseLine(line);
+        }
+      }
+
+      async function connectOrDisconnect() {
+        if (state.connected && bleDevice && bleDevice.gatt.connected) {
+          bleDevice.gatt.disconnect();
+          return;
+        }
+        if (!navigator.bluetooth) {
+          setLog('Trinh duyet khong ho tro Web BLE. Hay mo bang Bluefy (iPhone) hoac Chrome.');
+          return;
+        }
+        try {
+          setLog('Dang tim BalancingBike-C3...');
+          bleDevice = await navigator.bluetooth.requestDevice({
+            filters: [{ services: [NUS_SERVICE] }]
+          });
+          bleDevice.addEventListener('gattserverdisconnected', handleDisconnect);
+
+          var server = await bleDevice.gatt.connect();
+          var service = await server.getPrimaryService(NUS_SERVICE);
+          rxChar = await service.getCharacteristic(NUS_RX_CHAR);
+          txChar = await service.getCharacteristic(NUS_TX_CHAR);
+          await txChar.startNotifications();
+          txChar.addEventListener('characteristicvaluechanged', onNotify);
+
+          state.connected = true;
+          rxBuffer = '';
+          renderUI();
+          setLog('Da ket noi BLE! Dang dong bo trang thai...');
+          sendPriority('STATUS\n', true);
+        } catch (err) {
+          setLog('Ket noi that bai: ' + err.message);
+        }
+      }
+
+      function handleDisconnect() {
+        state.connected = false;
+        state.enabled = false;
+        state.spd = 0;
+        state.str = 0;
+        rxChar = null;
+        txChar = null;
+        priorityQueue.length = 0;
+        pendingDrag.spd = null;
+        pendingDrag.str = null;
+        el.armBadge.textContent = 'STANDBY';
+        el.armBadge.classList.remove('armed');
+        resetSteerVisual();
+        resetThrottleVisual();
+        renderUI();
+        setLog('Mat ket noi BLE');
+      }
+
+      function resetSteerVisual() {
+        el.steerKnob.classList.remove('active');
+        el.steerKnob.style.transform = 'translate(-50%, -50%)';
+        state.str = 0;
+        el.strOut.textContent = '0 deg';
+      }
+
+      function resetThrottleVisual() {
+        el.thrKnob.classList.remove('active');
+        el.thrKnob.style.transform = 'translate(-50%, -50%)';
+        state.spd = 0;
+        el.spdOut.textContent = '0%';
+      }
+
+      // Single-axis joysticks lock perpendicular finger slip to eliminate accidental cross-inputs.
+      function setupHorizontalJoystick() {
+        var activePtr = null;
+
+        function updateFromEvent(e) {
+          var rect = el.steerRail.getBoundingClientRect();
+          var maxTravel = Math.max(20, (rect.width - 74) / 2);
+          var dx = e.clientX - (rect.left + rect.width / 2);
+          if (dx > maxTravel) dx = maxTravel;
+          if (dx < -maxTravel) dx = -maxTravel;
+
+          var norm = dx / maxTravel;
+          el.steerKnob.style.transform = 'translate(calc(-50% + ' + dx.toFixed(1) + 'px), -50%)';
+
+          var deg = Math.abs(norm) < 0.12 ? 0 : Math.round(norm * MAX_STEER_DEG);
+          state.str = deg;
+          el.strOut.textContent = deg + ' deg';
+          queueDragAxis('str', deg);
+        }
+
+        function release(e) {
+          if (activePtr === null || (e && e.pointerId !== activePtr)) return;
+          activePtr = null;
+          resetSteerVisual();
+          sendZeroAxis('str');
+        }
+
+        el.steerRail.addEventListener('pointerdown', function (e) {
+          e.preventDefault();
+          if (activePtr !== null) return;
+          activePtr = e.pointerId;
+          el.steerKnob.classList.add('active');
+          if (el.steerRail.setPointerCapture) {
+            try { el.steerRail.setPointerCapture(e.pointerId); } catch (_) {}
+          }
+          updateFromEvent(e);
+        });
+        el.steerRail.addEventListener('pointermove', function (e) {
+          if (e.pointerId !== activePtr) return;
+          e.preventDefault();
+          updateFromEvent(e);
+        });
+        el.steerRail.addEventListener('pointerup', release);
+        el.steerRail.addEventListener('pointercancel', release);
+        el.steerRail.addEventListener('lostpointercapture', release);
+
+        return release;
+      }
+
+      function setupVerticalJoystick() {
+        var activePtr = null;
+
+        function updateFromEvent(e) {
+          var rect = el.thrRail.getBoundingClientRect();
+          var maxTravel = Math.max(20, (rect.height - 74) / 2);
+          var dy = e.clientY - (rect.top + rect.height / 2);
+          if (dy > maxTravel) dy = maxTravel;
+          if (dy < -maxTravel) dy = -maxTravel;
+
+          var norm = -dy / maxTravel;
+          el.thrKnob.style.transform = 'translate(-50%, calc(-50% + ' + dy.toFixed(1) + 'px))';
+
+          var pct = Math.abs(norm) < 0.12 ? 0 : Math.round(norm * state.gear);
+          state.spd = pct;
+          el.spdOut.textContent = (pct > 0 ? '+' : '') + pct + '%';
+          queueDragAxis('spd', pct);
+        }
+
+        function release(e) {
+          if (activePtr === null || (e && e.pointerId !== activePtr)) return;
+          activePtr = null;
+          resetThrottleVisual();
+          sendZeroAxis('spd');
+        }
+
+        el.thrRail.addEventListener('pointerdown', function (e) {
+          e.preventDefault();
+          if (activePtr !== null) return;
+          activePtr = e.pointerId;
+          el.thrKnob.classList.add('active');
+          if (el.thrRail.setPointerCapture) {
+            try { el.thrRail.setPointerCapture(e.pointerId); } catch (_) {}
+          }
+          updateFromEvent(e);
+        });
+        el.thrRail.addEventListener('pointermove', function (e) {
+          if (e.pointerId !== activePtr) return;
+          e.preventDefault();
+          updateFromEvent(e);
+        });
+        el.thrRail.addEventListener('pointerup', release);
+        el.thrRail.addEventListener('pointercancel', release);
+        el.thrRail.addEventListener('lostpointercapture', release);
+
+        return release;
+      }
+
+      function bindHoldButton(btnId, pressCmd, relCmd, onUpdate) {
+        var btn = document.getElementById(btnId);
+        var activePtr = null;
+        function rel(e) {
+          if (activePtr === null || (e && e.pointerId !== activePtr)) return;
+          activePtr = null;
+          btn.classList.remove('held');
+          onUpdate(false);
+          if (state.connected) sendPriority(relCmd, false);
+        }
+        btn.addEventListener('pointerdown', function (e) {
+          e.preventDefault();
+          if (activePtr !== null) return;
+          activePtr = e.pointerId;
+          btn.classList.add('held');
+          if (btn.setPointerCapture) {
+            try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+          }
+          onUpdate(true);
+          sendPriority(pressCmd, false);
+        });
+        btn.addEventListener('pointerup', rel);
+        btn.addEventListener('pointercancel', rel);
+        btn.addEventListener('lostpointercapture', rel);
+      }
+
+      var releaseSteerJoy = setupHorizontalJoystick();
+      var releaseThrJoy = setupVerticalJoystick();
+
+      bindHoldButton('btnLeft', '!B71', '!B70', function (on) {
+        state.str = on ? -MAX_STEER_DEG : 0;
+        el.strOut.textContent = state.str + ' deg';
+      });
+      bindHoldButton('btnRight', '!B81', '!B80', function (on) {
+        state.str = on ? MAX_STEER_DEG : 0;
+        el.strOut.textContent = state.str + ' deg';
+      });
+      bindHoldButton('btnFwd', '!B51', '!B50', function (on) {
+        state.spd = on ? state.gear : 0;
+        el.spdOut.textContent = (state.spd > 0 ? '+' : '') + state.spd + '%';
+      });
+      bindHoldButton('btnRev', '!B61', '!B60', function (on) {
+        state.spd = on ? -state.gear : 0;
+        el.spdOut.textContent = (state.spd > 0 ? '+' : '') + state.spd + '%';
+      });
+
+      el.btnConnect.addEventListener('click', connectOrDisconnect);
+      el.btnStatus.addEventListener('click', function () { sendPriority('STATUS\n', false); });
+      el.btnMode.addEventListener('click', function () {
+        state.mode = state.mode === 'joy' ? 'pad' : 'joy';
+        resetSteerVisual();
+        resetThrottleVisual();
+        if (state.connected) {
+          sendZeroAxis('str');
+          sendZeroAxis('spd');
+        }
+        renderUI();
+      });
+
+      el.btnEnable.addEventListener('click', function () {
+        var next = !state.enabled;
+        state.enabled = next;
+        renderUI();
+        sendPriority('EN:' + (next ? '1' : '0') + '\n', false);
+      });
+
+      el.btnEstop.addEventListener('click', function () {
+        state.enabled = false;
+        resetSteerVisual();
+        resetThrottleVisual();
+        renderUI();
+        sendPriority('STOP\n', true);
+      });
+
+      document.querySelectorAll('.tune-step').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var param = btn.getAttribute('data-param');
+          var delta = parseFloat(btn.getAttribute('data-delta'));
+          if (param === 'kp') {
+            state.kp = Math.min(200, Math.max(0, Math.round((state.kp + delta) * 10) / 10));
+            renderUI();
+            sendPriority('KP:' + state.kp.toFixed(1) + '\n', false);
+          } else if (param === 'kd') {
+            state.kd = Math.min(50, Math.max(0, Math.round((state.kd + delta) * 100) / 100));
+            renderUI();
+            sendPriority('KD:' + state.kd.toFixed(2) + '\n', false);
+          } else if (param === 'gear') {
+            state.gear = Math.min(100, Math.max(10, state.gear + delta));
+            renderUI();
+            if (state.connected) {
+              sendPriority(delta > 0 ? '!B41' : '!B31', false);
+            }
+          }
+        });
+      });
+
+      el.kpVal.addEventListener('click', function () {
+        var raw = window.prompt('Nhap gia tri KP (0 - 200):', state.kp.toFixed(1));
+        if (raw === null) return;
+        var val = parseFloat(raw);
+        if (!isNaN(val)) {
+          state.kp = Math.min(200, Math.max(0, Math.round(val * 10) / 10));
+          renderUI();
+          sendPriority('KP:' + state.kp.toFixed(1) + '\n', false);
+        }
+      });
+
+      el.kdVal.addEventListener('click', function () {
+        var raw = window.prompt('Nhap gia tri KD (0 - 50):', state.kd.toFixed(2));
+        if (raw === null) return;
+        var val = parseFloat(raw);
+        if (!isNaN(val)) {
+          state.kd = Math.min(50, Math.max(0, Math.round(val * 100) / 100));
+          renderUI();
+          sendPriority('KD:' + state.kd.toFixed(2) + '\n', false);
+        }
+      });
+
+      function emergencyCenterControls() {
+        var wasStr = state.str !== 0;
+        var wasSpd = state.spd !== 0;
+        releaseSteerJoy();
+        releaseThrJoy();
+        resetSteerVisual();
+        resetThrottleVisual();
+        if (state.connected) {
+          if (wasStr) sendZeroAxis('str');
+          if (wasSpd) sendZeroAxis('spd');
+        }
+      }
+
+      window.addEventListener('blur', emergencyCenterControls);
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) emergencyCenterControls();
+      });
+
+      renderUI();
+    })();
+  </script>
+</body>
+</html>

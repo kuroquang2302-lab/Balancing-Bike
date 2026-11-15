@@ -1,5 +1,5 @@
-#ifndef SOC_STM_ENCODER_TIM3_H
-#define SOC_STM_ENCODER_TIM3_H
+#ifndef _SOC_STM_ENCODER_TIM3_H_
+#define _SOC_STM_ENCODER_TIM3_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,4 +14,4 @@ void releaseEncoder_TIM3(void);
 }
 #endif
 
-#endif
+#endif // _SOC_STM_ENCODER_TIM3_H_
