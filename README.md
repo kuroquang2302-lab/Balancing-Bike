@@ -12,7 +12,7 @@ Moving from script code to native visual blocks makes signal flow easy to inspec
 
 Earlier versions placed sensor filtering, balance equations, and motor logic inside custom MATLAB Function code blocks. That approach hid internal states and slowed down tuning on real hardware.
 
-The upgraded model replaces every custom script block with standard Simulink math, logic, discrete filter, relay, and saturation blocks inside `TESTMOSTHARDWARE.slx`. Every intermediate signal can now be monitored in real time while the controller gains are adjusted directly from the Simulink workspace.
+The upgraded model replaces every custom script block with standard Simulink math, logic, discrete filter, relay, and saturation blocks inside `BalancingBike.slx`. Every intermediate signal can now be monitored in real time while the controller gains are adjusted directly from the Simulink workspace.
 
 ## Algorithms Behind the Blocks
 
@@ -52,7 +52,7 @@ Dedicated C++ System Object blocks configure Timer 3 and Timer 2 in four-times h
 
 ## Repository Structure
 
-- File `TESTMOSTHARDWARE.slx` contains the complete pure-block Simulink model ready for hardware testing.
+- File `BalancingBike.slx` contains the complete pure-block Simulink model ready for hardware testing.
 - Folder `src/hal` holds the hardware abstraction blocks and low-level C++ register drivers for encoders and wireless serial communication.
 - Folder `src/esp32_ble_bridge` holds the PlatformIO firmware for the ESP32-C3 Super Mini wireless bridge.
 - Folder `docs` contains pin assignments, wireless protocol documentation, and background design notes.
@@ -60,7 +60,7 @@ Dedicated C++ System Object blocks configure Timer 3 and Timer 2 in four-times h
 ## Quick Start
 
 1. Open MATLAB and add `src/hal` along with its subfolders to the MATLAB path.
-2. Open `TESTMOSTHARDWARE.slx` in Simulink.
+2. Open `BalancingBike.slx` in Simulink.
 3. Connect the STM32F411RE Nucleo-64 board through a universal serial bus cable and click Monitor and Tune for live tuning, or click Build, Deploy and Start for standalone battery operation.
 
 ## Credits
