@@ -8,7 +8,7 @@ A reaction-wheel self-balancing bicycle built on an STM32F411RE microcontroller 
 
 ## Control Method
 
-![Control Method](docs/images/control_method.jpg)
+[![Control Method](docs/images/control_method.png)](docs/images/control_method.pdf)
 
 - **Inner balance loop:** Reacts immediately to roll angle and angular rate to keep the bicycle upright while damping flywheel speed.
 - **Outer trim loop:** Gradually adapts the balance setpoint from flywheel velocity so static weight imbalance does not saturate the wheel.
@@ -16,7 +16,7 @@ A reaction-wheel self-balancing bicycle built on an STM32F411RE microcontroller 
 
 ## Simulink Architecture
 
-![Simulink Model](docs/images/simulink_model.png)
+[![Simulink Model](docs/images/simulink_model.png)](docs/images/simulink_model.pdf)
 
 The entire sensing, balancing, motor driving, steering, and wireless communication pipeline runs directly from standard Simulink blocks and hardware abstraction blocks inside `BalancingBike.slx`.
 
