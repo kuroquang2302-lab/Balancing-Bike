@@ -18,7 +18,7 @@ A reaction-wheel self-balancing bicycle built on an STM32F411RE microcontroller 
 
 [![Simulink Model](docs/images/simulink_model.png)](docs/images/simulink_model.pdf)
 
-The entire sensing, balancing, motor driving, steering, and wireless communication pipeline runs directly from standard Simulink blocks and hardware abstraction blocks inside `BalancingBike.slx`.
+The entire sensing, balancing, motor driving, steering, and wireless communication pipeline runs directly from standard Simulink blocks and hardware abstraction blocks inside `BalancingBike.slx`. Click the diagram above to view the complete multi-page schematic PDF covering all subsystems.
 
 ## Hardware
 
