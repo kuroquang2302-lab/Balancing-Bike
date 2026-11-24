@@ -51,7 +51,11 @@ static volatile bool g_pendingReset            = false;
 static volatile bool g_forceSendFrame          = false;
 static volatile uint8_t g_pendingBeepMode      = 0;
 static volatile uint32_t g_lastDisconnectedMs  = 0;
-static bool g_offsetBeeped                     = false;
+static volatile bool g_offsetBeeped            = false;
+static volatile bool g_hasPendingStatus        = false;
+static char g_pendingStatusPrefix[16]          = {0};
+static volatile bool g_hasPendingErr           = false;
+static char g_pendingErrMsg[96]                = {0};
 static bool g_ecoMode                          = false;
 static bool g_hibernateMode                    = false;
 static bool g_advWindowOpen                    = true;
@@ -183,6 +187,20 @@ static void sendFeedbackToIOS(const char *msg)
     }
 }
 
+static void queueStatusReply(const char *prefix)
+{
+    strncpy(g_pendingStatusPrefix, prefix, sizeof(g_pendingStatusPrefix) - 1);
+    g_pendingStatusPrefix[sizeof(g_pendingStatusPrefix) - 1] = '\0';
+    g_hasPendingStatus                                       = true;
+}
+
+static void queueErrorReply(const char *cmd)
+{
+    snprintf(g_pendingErrMsg, sizeof(g_pendingErrMsg),
+             "ERR: %s | Valid: EN:1 SPD:30 STR:0 KP:46.0 KD:2.00 TRIM:0.04 OFS:-1.01 STOP RESET\n", cmd);
+    g_hasPendingErr = true;
+}
+
 static void reportCurrentStatus(const char *prefix)
 {
     BikeControlState snap;
@@ -264,9 +282,12 @@ static bool parseBluefruitGamepad(const char *data, size_t len)
     {
         g_pendingBeepMode = beepMode;
     }
+    if (btn >= '1' && btn <= '4')
+    {
+        queueStatusReply(press ? "PAD_PRESS" : "PAD_REL");
+    }
     portEXIT_CRITICAL(&g_stateMux);
 
-    reportCurrentStatus(press ? "PAD_PRESS" : "PAD_REL");
     return true;
 }
 
@@ -376,22 +397,18 @@ static void parseTextCommand(const char *rawInput, size_t len)
     {
         g_pendingBeepMode = beepMode;
     }
-    portEXIT_CRITICAL(&g_stateMux);
-
     if (recognized)
     {
         if (!isContinuousMotion)
         {
-            reportCurrentStatus(g_pendingReset ? "REBOOTING" : "OK");
+            queueStatusReply(g_pendingReset ? "REBOOTING" : "OK");
         }
     }
     else
     {
-        char errMsg[96];
-        snprintf(errMsg, sizeof(errMsg),
-                 "ERR: %s | Valid: EN:1 SPD:30 STR:0 KP:46.0 KD:2.00 TRIM:0.04 OFS:-1.01 STOP RESET\n", start);
-        sendFeedbackToIOS(errMsg);
+        queueErrorReply(start);
     }
+    portEXIT_CRITICAL(&g_stateMux);
 }
 
 static void sendFrameToSTM32()
@@ -508,6 +525,7 @@ void setup()
     g_lastDisconnectedMs = millis();
 
     NimBLEDevice::init("BalancingBike-C3");
+    NimBLEDevice::setMTU(185);
     NimBLEDevice::setPower(ESP_PWR_LVL_N0);
 
     NimBLEServer *pServer = NimBLEDevice::createServer();
@@ -541,6 +559,37 @@ void loop()
     static bool ledState        = false;
     static char stmBuf[65];
     static size_t stmIdx        = 0;
+
+    bool sendStatusNow = false;
+    char statusPrefix[16];
+    bool sendErrNow = false;
+    char errCopy[96];
+
+    portENTER_CRITICAL(&g_stateMux);
+    if (g_hasPendingStatus)
+    {
+        g_hasPendingStatus = false;
+        strncpy(statusPrefix, g_pendingStatusPrefix, sizeof(statusPrefix) - 1);
+        statusPrefix[sizeof(statusPrefix) - 1] = '\0';
+        sendStatusNow                          = true;
+    }
+    if (g_hasPendingErr)
+    {
+        g_hasPendingErr = false;
+        strncpy(errCopy, g_pendingErrMsg, sizeof(errCopy) - 1);
+        errCopy[sizeof(errCopy) - 1] = '\0';
+        sendErrNow                   = true;
+    }
+    portEXIT_CRITICAL(&g_stateMux);
+
+    if (sendStatusNow)
+    {
+        reportCurrentStatus(statusPrefix);
+    }
+    if (sendErrNow)
+    {
+        sendFeedbackToIOS(errCopy);
+    }
 
     if (g_pendingReset)
     {

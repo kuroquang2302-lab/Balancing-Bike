@@ -560,8 +560,8 @@
       var NUS_TX_CHAR = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
       var MAX_STEER_DEG = 25;
-      var WRITE_PACE_MS = 25;
-      var DRAG_PACE_MS = 50;
+      var WRITE_PACE_MS = 20;
+      var DRAG_PACE_MS = 45;
       var encoder = new TextEncoder();
       var decoder = new TextDecoder();
 
@@ -652,11 +652,21 @@
       async function writeBleRaw(cmd) {
         if (!rxChar) return;
         var bytes = encoder.encode(cmd);
-        if (rxChar.properties && rxChar.properties.writeWithoutResponse && typeof rxChar.writeValueWithoutResponse === 'function') {
-          await rxChar.writeValueWithoutResponse(bytes);
-        } else {
-          await rxChar.writeValue(bytes);
+        var canWithoutRsp = typeof rxChar.writeValueWithoutResponse === 'function' &&
+          !(rxChar.properties && rxChar.properties.writeWithoutResponse === false);
+        if (canWithoutRsp) {
+          try {
+            await rxChar.writeValueWithoutResponse(bytes);
+            return;
+          } catch (err) {
+            if (typeof rxChar.writeValue === 'function') {
+              await rxChar.writeValue(bytes);
+              return;
+            }
+            throw err;
+          }
         }
+        await rxChar.writeValue(bytes);
       }
 
       function scheduleTxPump(delayMs) {
@@ -715,7 +725,7 @@
           setLog('Loi gui BLE: ' + err.message);
         } finally {
           txBusy = false;
-          if (priorityQueue.length > 0 && state.connected) {
+          if ((priorityQueue.length > 0 || pendingDrag.str !== null || pendingDrag.spd !== null) && state.connected) {
             scheduleTxPump(WRITE_PACE_MS);
           }
         }
@@ -794,7 +804,6 @@
           state.gear = parseInt(st[3], 10);
           state.kp = parseFloat(st[5]);
           state.kd = parseFloat(st[6]);
-          el.valOfs.textContent = st[8] + '°';
           renderUI();
         }
         setLog(line);
@@ -802,6 +811,9 @@
 
       function onNotify(event) {
         rxBuffer += decoder.decode(event.target.value, { stream: true });
+        if (rxBuffer.length > 512) {
+          rxBuffer = rxBuffer.slice(-128);
+        }
         var idx;
         while ((idx = rxBuffer.indexOf('\n')) >= 0) {
           var line = rxBuffer.slice(0, idx).replace(/\r/g, '').trim();
@@ -821,20 +833,31 @@
         }
         try {
           setLog('Dang tim BalancingBike-C3...');
-          bleDevice = await navigator.bluetooth.requestDevice({
-            filters: [{ services: [NUS_SERVICE] }]
+          var nextDevice = await navigator.bluetooth.requestDevice({
+            filters: [{ services: [NUS_SERVICE] }],
+            optionalServices: [NUS_SERVICE]
           });
+          if (bleDevice && bleDevice !== nextDevice) {
+            try { bleDevice.removeEventListener('gattserverdisconnected', handleDisconnect); } catch (_) {}
+          }
+          bleDevice = nextDevice;
+          bleDevice.removeEventListener('gattserverdisconnected', handleDisconnect);
           bleDevice.addEventListener('gattserverdisconnected', handleDisconnect);
 
           var server = await bleDevice.gatt.connect();
           var service = await server.getPrimaryService(NUS_SERVICE);
           rxChar = await service.getCharacteristic(NUS_RX_CHAR);
           txChar = await service.getCharacteristic(NUS_TX_CHAR);
-          await txChar.startNotifications();
+          txChar.removeEventListener('characteristicvaluechanged', onNotify);
           txChar.addEventListener('characteristicvaluechanged', onNotify);
+          await txChar.startNotifications();
 
           state.connected = true;
           rxBuffer = '';
+          lastSentDrag.spd = 0;
+          lastSentDrag.str = 0;
+          lastSentDrag.spdAt = 0;
+          lastSentDrag.strAt = 0;
           renderUI();
           setLog('Da ket noi BLE! Dang dong bo trang thai...');
           sendPriority('STATUS\n', true);
@@ -848,11 +871,25 @@
         state.enabled = false;
         state.spd = 0;
         state.str = 0;
+        if (txTimer) {
+          clearTimeout(txTimer);
+          txTimer = null;
+        }
+        if (txChar) {
+          try { txChar.removeEventListener('characteristicvaluechanged', onNotify); } catch (_) {}
+        }
+        if (bleDevice) {
+          try { bleDevice.removeEventListener('gattserverdisconnected', handleDisconnect); } catch (_) {}
+        }
         rxChar = null;
         txChar = null;
         priorityQueue.length = 0;
         pendingDrag.spd = null;
         pendingDrag.str = null;
+        lastSentDrag.spd = 0;
+        lastSentDrag.str = 0;
+        lastSentDrag.spdAt = 0;
+        lastSentDrag.strAt = 0;
         el.armBadge.textContent = 'STANDBY';
         el.armBadge.classList.remove('armed');
         resetSteerVisual();
@@ -888,9 +925,36 @@
       function setupAxisJoystick(cfg) {
         var activeTouchId = null;
         var mouseActive = false;
+        var railRect = null;
+        var rafId = null;
+        var pendingTx = null;
+        var pendingLabel = null;
+        var lastLabel = null;
+
+        function flushFrame() {
+          rafId = null;
+          if (pendingTx !== null) {
+            cfg.knob.style.transform = pendingTx;
+            pendingTx = null;
+          }
+          if (pendingLabel !== null && pendingLabel !== lastLabel) {
+            cfg.outEl.textContent = pendingLabel;
+            lastLabel = pendingLabel;
+          }
+          pendingLabel = null;
+        }
+
+        function scheduleVisual(tx, label) {
+          pendingTx = tx;
+          pendingLabel = label;
+          if (rafId === null) {
+            rafId = requestAnimationFrame(flushFrame);
+          }
+        }
 
         function updateFromPoint(clientX, clientY) {
-          var rect = cfg.rail.getBoundingClientRect();
+          var rect = railRect || cfg.rail.getBoundingClientRect();
+          railRect = rect;
           var maxTravel = Math.max(20, ((cfg.vertical ? rect.height : rect.width) - 74) / 2);
           var delta = cfg.vertical
             ? (clientY - (rect.top + rect.height / 2))
@@ -902,13 +966,21 @@
           var tx = cfg.vertical
             ? 'translate3d(-50%, calc(-50% + ' + delta.toFixed(1) + 'px), 0)'
             : 'translate3d(calc(-50% + ' + delta.toFixed(1) + 'px), -50%, 0)';
-          cfg.knob.style.transform = tx;
 
-          var outVal = cfg.onNorm(norm);
-          queueDragAxis(cfg.axis, outVal);
+          var res = cfg.onNorm(norm);
+          scheduleVisual(tx, res.label);
+          queueDragAxis(cfg.axis, res.val);
         }
 
         function releaseAll() {
+          railRect = null;
+          if (rafId !== null) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+          }
+          pendingTx = null;
+          pendingLabel = null;
+          lastLabel = null;
           if (activeTouchId === null && !mouseActive) return;
           activeTouchId = null;
           mouseActive = false;
@@ -922,6 +994,7 @@
           if (activeTouchId !== null || e.changedTouches.length === 0) return;
           var t = e.changedTouches[0];
           activeTouchId = t.identifier;
+          railRect = cfg.rail.getBoundingClientRect();
           cfg.knob.classList.add('active');
           updateFromPoint(t.clientX, t.clientY);
         }, { passive: false });
@@ -948,6 +1021,7 @@
           if (Date.now() - lastTouchAt < 700) return;
           e.preventDefault();
           mouseActive = true;
+          railRect = cfg.rail.getBoundingClientRect();
           cfg.knob.classList.add('active');
           updateFromPoint(e.clientX, e.clientY);
         });
@@ -1049,12 +1123,12 @@
         vertical: false,
         rail: el.steerRail,
         knob: el.steerKnob,
+        outEl: el.strOut,
         resetVisual: resetSteerVisual,
         onNorm: function (norm) {
           var deg = Math.abs(norm) < 0.12 ? 0 : Math.round(norm * MAX_STEER_DEG);
           state.str = deg;
-          el.strOut.textContent = deg + ' deg';
-          return deg;
+          return { val: deg, label: deg + ' deg' };
         }
       });
 
@@ -1063,12 +1137,12 @@
         vertical: true,
         rail: el.thrRail,
         knob: el.thrKnob,
+        outEl: el.spdOut,
         resetVisual: resetThrottleVisual,
         onNorm: function (norm) {
           var pct = Math.abs(norm) < 0.12 ? 0 : Math.round(norm * state.gear);
           state.spd = pct;
-          el.spdOut.textContent = (pct > 0 ? '+' : '') + pct + '%';
-          return pct;
+          return { val: pct, label: (pct > 0 ? '+' : '') + pct + '%' };
         }
       });
 
@@ -1111,6 +1185,8 @@
 
       bindFastTap(el.btnEstop, function () {
         state.enabled = false;
+        lastSentDrag.spd = 0;
+        lastSentDrag.str = 0;
         resetSteerVisual();
         resetThrottleVisual();
         renderUI();
@@ -1162,15 +1238,13 @@
       }, false);
 
       function emergencyCenterControls() {
-        var wasStr = state.str !== 0;
-        var wasSpd = state.spd !== 0;
         releaseSteerJoy();
         releaseThrJoy();
         resetSteerVisual();
         resetThrottleVisual();
         if (state.connected) {
-          if (wasStr) sendZeroAxis('str');
-          if (wasSpd) sendZeroAxis('spd');
+          if (lastSentDrag.str !== 0) sendZeroAxis('str');
+          if (lastSentDrag.spd !== 0) sendZeroAxis('spd');
         }
       }
 
