@@ -4,7 +4,7 @@
 
 A reaction-wheel self-balancing bicycle built on an STM32F411RE microcontroller and programmed with native MATLAB Simulink blocks. Mechanical concepts are adapted from the open-source design by RemRC, paired with wireless smartphone control over Bluetooth Low Energy.
 
-[Web BLE Controller](https://kuroquang2302-lab.github.io/Balancing-Bike/) · [Documentation](docs)
+[Demo Video](https://youtu.be/3q21Ym3WPoM) · [Web BLE Controller](https://kuroquang2302-lab.github.io/Balancing-Bike/) · [Documentation](docs)
 
 ## Control Method
 
