@@ -2,81 +2,54 @@
 
 ## 1. Reaction Wheel Inverted Pendulum Dynamics
 
-The lateral roll dynamics of the bicycle chassis about its ground contact line are governed by the non-linear inverted pendulum equation:
+The lateral roll motion of the bicycle about its tire contact line follows the nonlinear inverted pendulum model:
 
 $$I_{\text{bike}} \ddot{\theta} = m g h \sin(\theta - \theta_{\text{CM}}) - \tau_{\text{wheel}}$$
 
-where:
-- $\theta$: Roll angle relative to the gravity vector.
-- $\theta_{\text{CM}}$: Static angular offset of the physical center of mass.
-- $m$: Total system mass ($0.75\text{ kg} \dots 0.80\text{ kg}$).
-- $h$: Effective height of the center of mass above the ground contact patch ($0.06\text{ m}$).
-- $I_{\text{bike}}$: Lumped moment of inertia of the bicycle frame.
-- $\tau_{\text{wheel}}$: Reaction torque applied by the flywheel to the frame.
-
-The reaction torque delivered to the chassis is directly proportional to the angular acceleration of the flywheel:
+where $\theta$ is the roll angle relative to vertical, $\theta_{\text{CM}}$ is the static center-of-mass offset angle, $m$ is total mass, $h$ is center-of-mass height, $I_{\text{bike}}$ is frame roll inertia, and $\tau_{\text{wheel}}$ is reaction torque from the flywheel. Reaction torque is proportional to flywheel angular acceleration:
 
 $$\tau_{\text{wheel}} = J_{\text{wheel}} \dot{\omega}_{\text{wheel}}$$
-
-where $J_{\text{wheel}} = 3.1 \times 10^{-4}\text{ kg}\cdot\text{m}^2$ is the moment of inertia of the reaction wheel.
 
 ---
 
 ## 2. Velocity-Mode Actuator Dynamics (Nidec 24H)
 
-The internal Application-Specific Integrated Circuit (ASIC) of the Nidec 24H BLDC motor regulates angular velocity proportionally to the input PWM duty cycle:
+The internal driver ASIC on the Nidec 24H regulates motor speed proportionally to the applied PWM command rather than motor current:
 
 $$\omega_{\text{wheel}} \approx K_v u$$
 
-where $K_v \approx 31.36\text{ RPM}/\%$ is the steady-state velocity gain at $12\text{ V}$.
-
-Differentiating with respect to time yields the instantaneous reaction torque acting on the bicycle frame:
-
-$$\tau_{\text{wheel}} = J_{\text{wheel}} K_v \frac{du}{dt}$$
-
-### Physical Implications of Pure PD Control
-If a standard PD control law $u = -K_p e - K_d \dot{e}$ is applied (where $e = \theta - \theta_{\text{offset}}$), its time derivative becomes:
-
-$$\frac{du}{dt} = -K_p \dot{e} - K_d \ddot{e}$$
-
-At the turning point of a roll disturbance (where roll velocity $\dot{e} = 0$), the proportional term $-K_p \dot{e}$ vanishes completely. Consequently, the motor ceases to accelerate, producing zero restoring torque at the point of maximum lean.
-
-To restore a static restoring torque proportional to angle, an integral error term $-K_i \int e\,dt$ and non-linear gravity feedforward $-K_g \sin(e)$ must be incorporated:
-
-$$\frac{d}{dt} \left( -K_i \int e\,dt \right) = -K_i e$$
-
-Taking the time derivative of the integral term yields a term proportional to displacement $-K_i e$, directly resisting gravitational torque.
+where $K_v \approx 31.36\text{ RPM}/\%$ at `12 V` ($1/K_v \approx 0.0319\text{ \%/RPM}$). Because back-EMF naturally resists spin and drags an uncommanded rotor back toward zero, a pure PD controller loses restoring torque as flywheel speed builds up. Adding feedforward speed compensation $+K_w \omega_{\text{wheel}}$ cancels internal back-EMF damping so the PD error term produces true angular acceleration ($\dot{\omega}_{\text{wheel}}$). Setting $K_w = 0.036 > 1/K_v$ cancels back-EMF and leaves a slight restoring drag (`+0.0041 * RPM`) that pulls wheel speed smoothly toward zero.
 
 ---
 
-## 3. Cascaded Two-Loop Control Scheme
+## 3. Signal Conditioning (`200 Hz`, `T_s = 5 ms`)
 
-### 3.1. Inner Balance Loop ($f_s = 200\text{ Hz}, T_s = 5\text{ ms}$)
-The inner loop computes the total control command by combining gravity feedforward, roll angle PID, and flywheel velocity damping:
+- **Attitude Estimation (`MPU6050_filter`):** Reads `14` raw bytes over `I2C` (`0x68`), reconstructs signed 16-bit accelerometer and gyroscope values, computes tilt via `atan2(ay, az)`, and runs a complementary filter (`99%` integrated gyro + `1%` accelerometer). Raw angular rate is smoothed by a discrete low-pass filter (`0.4 / (1 - 0.6 z^-1)`). An `Init_Seed_Switch` initializes the integrator from the accelerometer during the first step, and `Valid_Angle_Switch` outputs `999.0` if sensor magnitude collapses (`Fault_Angle`).
+- **Flywheel Speed (`ENCODER_TIM3`):** Reads the 16-bit hardware quadrature counter on `PA6`/`PA7`, applies modulo wrap-around correction (`+32768 -> mod 65536 -> -32768`) to prevent overflow spikes across `0` / `65535`, scales by `30` (`60 / (400 * 0.005 s)`) to yield RPM, and filters through `0.25 / (1 - 0.75 z^-1)`.
 
-$$u = -K_g \sin(e) - K_p e - K_i \int e\,dt - K_d \dot{\theta} - K_w \omega_{\text{wheel}}$$
+---
 
-- **Anti-Windup Integration:** The integral accumulator is bounded at $\pm 25.0\%$ equivalent duty cycle. When $|e| < 0.15^\circ$, an exponential decay factor of $0.995$ is applied to discharge accumulator windup and prevent overshoot across the vertical equilibrium.
-- **Slew-Rate Limiter:** Maximum control variation between successive $5\text{ ms}$ steps is clamped to $|\Delta u| \le 8.0\% / 5\text{ ms}$, eliminating sharp torque steps and protecting the motor driver.
+## 4. Cascaded Two-Loop Controller (`BalancingBike.slx`)
 
-### 3.2. Soft High-Speed Power Derating
-As the flywheel approaches its physical speed limit ($3000\text{ RPM}$ under 12V load), back-EMF severely degrades available acceleration torque. To prevent sudden control cutoffs and limit-cycle oscillations:
-- For motor commands acting in the same direction as current spin ($u \cdot \omega_{\text{wheel}} > 0$):
-  - When $|\omega_{\text{wheel}}| \le 2500\text{ RPM}$: Full command applied ($\text{scale} = 1.0$).
-  - When $2500\text{ RPM} < |\omega_{\text{wheel}}| < 3000\text{ RPM}$: Linear scaling factor applied:
+### 4.1. Inner Balance Loop (`PD + Kw`)
+At each `5 ms` step, the inner controller evaluates:
 
-$$\text{scale} = \frac{3000 - |\omega_{\text{wheel}}|}{3000 - 2500}$$
+$$e = \theta - \theta_{\text{offset}}$$
 
-  - When $|\omega_{\text{wheel}}| \ge 3000\text{ RPM}$: Command suppressed to $0\%$ to prevent overspeed.
-- Reverse-torque braking commands ($u \cdot \omega_{\text{wheel}} < 0$) are never derated, allowing full recovery torque at all times.
+$$u = K_w \omega_{\text{wheel}} - K_p e - K_d \dot{\theta}$$
 
-### 3.3. Outer Momentum Dumping Loop
-Physical center-of-mass shifts cause the inner loop to maintain a steady-state lean error, forcing the flywheel to accelerate continuously until voltage saturation occurs. 
+- **Tuned Gains:** $K_p = 46.0$, $K_d = 2.0$, $K_w = 0.036$.
+- **Output Saturation:** `Sat_PWM` clamps `u` within `[-95.0, +95.0]` before entering `Driver`.
 
-The outer loop measures the true flywheel velocity $\omega_{\text{wheel}}$ via the TIM3 4x quadrature encoder and dynamically trims the balance setpoint $\theta_{\text{offset}}$:
+### 4.2. Outer Integral Trim Loop (`CoG Compensation`)
+Any lateral center-of-mass offset or slight floor slope causes the flywheel to speed up continuously until reaching saturation (`~3000 RPM`). The outer loop prevents saturation by trimming the balance setpoint:
 
-$$\dot{\theta}_{\text{offset}} = -K_{\text{trim}} \frac{\omega_{\text{wheel}}}{1000}$$
+1. **Slow Trend Extraction (`Slow_RPM_LPF`):** Passes `Motor_RPM` through `0.0025 / (1 - 0.9975 z^-1)` (~`2 s` time constant) to reject short push disturbances.
+2. **Deadzone (`Trim_Deadzone`):** Ignores jitter inside `±30 RPM`.
+3. **Anti-Windup (`Not_Sat_Check` & `Trim_Gate`):** Freezes integration whenever `|Speed_Cmd| >= 85%` or `Enable_Out = 0` so impact recoveries never corrupt the learned balance point.
+4. **Bounded Integrator (`Trim_Gain`, `Trim_Sat`, `Trim_Reset_Sw`):** Integrates at `1.5e-7` per step, clamped to `±1.5°`, and adds it to `Nominal_Offset` (`-1.005°`). `Trim_Memory` resets to `0` only when the user turns `Enable_Switch` OFF; if the bike trips past `12°` while still enabled, the learned offset stays frozen for immediate upright recovery.
 
-- The trim rate is saturated at $\pm 0.003^\circ / 5\text{ ms}$ ($0.6^\circ/\text{s}$).
-- The allowable setpoint range is strictly bounded within $\pm 3.0^\circ$ of the initial static calibration point $\theta_{\text{saved}}$.
-- By steering the frame slightly into the direction of motor acceleration, gravity exerts a natural opposing torque that decelerates the flywheel back to $0\text{ RPM}$.
+### 4.3. Safety Hysteresis & Motor Drivers
+- **Arming Relay (`Arm_Hysteresis`):** Arms balancing only when `|e| <= 2.0°`, holds through disturbances up to `12.0°`, and cuts PWM to `0` (`Safety_Switch`) beyond `12.0°`.
+- **Flywheel Driver (`Driver`):** Maps `|Speed_Cmd|` (`>= 1.0`) to `94.5 - 0.945 * |u|` at `20 kHz` active-low PWM (`100.0%` stop) with a 1-sample (`5 ms`) zero-PWM hold whenever `Prev_Dir != Dir_Neg` to protect the motor H-bridge.
+- **Rear Drive & Steering (`DRIVE and MOTION`):** Drives the rear Nidec 24H wheel open-loop using the same `94.5%` deadband map and `5 ms` reversal blanking, and maps `Steer_Angle` (`-45°..+45°`) onto `50 Hz` servo duty `7.5 + Steer_Angle * (2.5 / 45.0)`, clamped to `[5.0%, 10.0%]`.

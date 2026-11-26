@@ -1,98 +1,98 @@
-# Wireless BLE 5.0 Specification & ESP32-C3 Co-Processor Protocol
+# Wireless BLE 5.0 Protocol & ESP32-C3 Co-Processor
 
 ## 1. Dual-MCU Partitioning Rationale
 
-To maintain deterministic, hard real-time execution for the $200\text{ Hz}$ ($5\text{ ms}$) balance control loop on the primary `STM32F411RE` microcontroller, all Bluetooth Low Energy (BLE 5.0) protocol stack processing and string parsing are delegated to an auxiliary `ESP32-C3 Super Mini` co-processor.
+The primary `STM32F411RE` runs the deterministic `200 Hz` (`5 ms`) balance loop, hardware quadrature decoding (`TIM2`, `TIM3`), and `20 kHz` motor PWM. An auxiliary `ESP32-C3 Super Mini` handles the Bluetooth Low Energy (BLE 5.0) stack and text command parsing so radio events never delay the real-time balance controller.
 
-- **Client Controller (iOS):** Connects via `Adafruit Bluefruit LE Connect` or `LightBlue` using the Nordic UART Service (NUS).
-- **Wireless Co-Processor (`ESP32-C3 Super Mini`):** Receives raw character streams, decodes button events and text commands, formats them into fixed 14-byte binary packets with an XOR checksum, and transmits them at $50\text{ Hz}$ ($20\text{ ms}$) to the STM32 via `USART1`.
-- **Primary Control Core (`STM32F411RE Nucleo-64`):** Parses the 14-byte packets via UART DMA/interrupts and periodically replies with the active dynamic balance offset at $1\text{ Hz}$.
+- **Web BLE Client (`docs/index.html`):** Two-handed landscape controller at `https://kuroquang2302-lab.github.io/Balancing-Bike/` (tested on Bluefy for iOS and compatible with Chrome/Edge) or any Nordic UART Service (NUS) app such as Adafruit Bluefruit LE Connect or LightBlue.
+- **BLE Bridge (`ESP32-C3 Super Mini`):** Parses Web BLE / NUS commands, suppresses redundant notify replies during continuous joystick drags (`SPD:`, `STR:`, Pad `!B5..B8`), dispatches BLE notifications from the main `loop()` task (`MTU = 185`), and streams fixed `14-byte` XOR-checksummed frames to the STM32 at `50 Hz` (`20 ms`).
+- **Real-Time Core (`STM32F411RE Nucleo-64`):** Reads the `14-byte` UART frames continuously via `DMA2_Stream2` circular buffer with a `500 ms` (`100`-step) communications watchdog, and sends live telemetry back to the ESP32-C3 every `500 ms` (`2 Hz`) plus immediately upon arming (`A:<roll> R:<rpm> O:<ofs> E:<0|1>`).
 
 ---
 
-## 2. Hardware Interconnect (ESP32-C3 <-> STM32F411RE Nucleo-64)
+## 2. Hardware Interconnect (`ESP32-C3` to `STM32F411RE`)
 
-| Wire # | ESP32-C3 Super Mini Pin | STM32F411RE Pin | Nucleo-64 Header | Signal Description |
+| Wire # | ESP32-C3 Pin | STM32F411RE Pin | Nucleo-64 Header | Signal Description |
 | :---: | :--- | :--- | :---: | :--- |
-| **1** | `GPIO21` (`U0TXD`) | `PA10` (`USART1_RX`) | `D2` (`CN9`) | Transmits 14-byte command frames (115200 bps, 8N1, 3.3V) |
-| **2** | `GPIO20` (`U0RXD`) | `PA9` (`USART1_TX`) | `D8` (`CN5`) | Receives active offset telemetry from STM32 (115200 bps) |
-| **3** | `GND` | `GND` | `GND` (`CN6`/`CN5`) | Common system ground reference plane |
-| **4** | `5V` (`VBUS`) | `5V` | `5V` (`CN6` / Buck) | 5.0V supply input feeding onboard ME6211 3.3V LDO |
+| **1** | `GPIO21` (`U0TXD`) | `PA10` (`USART1_RX`) | `D2` (`CN9`) | Sends 14-byte command frames (`115200 bps`, 8N1, 3.3V) |
+| **2** | `GPIO20` (`U0RXD`) | `PA9` (`USART1_TX`) | `D8` (`CN5`) | Receives live STM32 telemetry lines (`115200 bps`, 8N1, 3.3V) |
+| **3** | `GND` | `GND` | `GND` (`CN6`/`CN5`) | Common system ground |
+| **4** | `5V` (`VBUS`) | `5V` | `5V` (`CN6` / Buck) | 5.0V rail feeding the onboard 3.3V regulator |
 
 > [!WARNING]
-> **Power Isolation Rule:** Never apply 5V power to the `VBUS` pin while a USB Type-C cable is simultaneously plugged into a computer. During USB programming or debugging on the ESP32-C3, disconnect the external 5V wire and keep only `GND`, `GPIO21`, and `GPIO20` connected to the STM32.
+> Never feed `5V` into `VBUS` while a USB cable is plugged into the ESP32-C3 for flashing or serial monitoring. Disconnect the external `5V` wire during USB flashing and keep `GND`, `GPIO21`, and `GPIO20` connected.
 
 ---
 
-## 3. BLE Service Specification & iOS Command Protocol
+## 3. BLE Service & Command Protocol
 
 ### 3.1. Nordic UART Service (NUS) Identifiers
-- **Advertised Device Name:** `BalancingBike-C3`
-- **Service UUID:** `6E400001-B5A3-F393-E0A9-E50E24DCCA9E`
-- **RX Characteristic UUID (iOS -> ESP32):** `6E400002-B5A3-F393-E0A9-E50E24DCCA9E` (`WRITE` / `WRITE_WITHOUT_RESPONSE`)
-- **TX Characteristic UUID (ESP32 -> iOS):** `6E400003-B5A3-F393-E0A9-E50E24DCCA9E` (`NOTIFY` / `READ`)
+- **Device Name:** `BalancingBike-C3`
+- **Service UUID:** `6e400001-b5a3-f393-e0a9-e50e24dcca9e`
+- **RX Characteristic (Phone to ESP32):** `6e400002-b5a3-f393-e0a9-e50e24dcca9e` (`WRITE` / `WRITE_NR`)
+- **TX Characteristic (ESP32 to Phone):** `6e400003-b5a3-f393-e0a9-e50e24dcca9e` (`NOTIFY` / `READ`)
 
-### 3.2. Bluefruit Control Pad Mapping (`!B<id><state><crc>`)
+### 3.2. Control Pad Mapping (`!B<id><state>`)
 
-| iOS Control Pad Button | Raw Packet (Press / Release) | Control Function |
+| Control Action | Raw Packet (Press / Release) | Behavior |
 | :--- | :--- | :--- |
-| **Button `1`** | `!B11` / `!B10` | Arm / Enable balance controller (`Enable_Switch = 1`) |
-| **Button `2`** | `!B21` / `!B20` | Emergency Disarm: stop flywheel and rear motor (`Enable_Switch = 0`, `Drive_Speed = 0`) |
-| **Button `3`** | `!B31` / `!B30` | Decrement rear drive speed gear by $10\%$ (Minimum: $10\%$) |
-| **Button `4`** | `!B41` / `!B40` | Increment rear drive speed gear by $10\%$ (Maximum: $100\%$) |
-| **Up Arrow (`UP`)** | `!B51` / `!B50` | Drive forward while held; returns to $0\%$ upon release |
-| **Down Arrow (`DOWN`)** | `!B61` / `!B60` | Drive reverse while held; returns to $0\%$ upon release |
-| **Left Arrow (`LEFT`)** | `!B71` / `!B70` | Steer servo left ($-25^\circ$) while held; returns to $0^\circ$ upon release |
-| **Right Arrow (`RIGHT`)** | `!B81` / `!B80` | Steer servo right ($+25^\circ$) while held; returns to $0^\circ$ upon release |
+| **Enable (`1`)** | `!B11` / `!B10` | Arms balance control (`Enable_Switch = 1`) |
+| **Disarm / E-Stop (`2`)** | `!B21` / `!B20` | Disarms controller (`Enable_Switch = 0`, `Drive_Speed = 0`, `Steer_Angle = 0`) |
+| **Gear Down (`3`)** | `!B31` / `!B30` | Decrements drive speed gear by `10%` (min `10%`) |
+| **Gear Up (`4`)** | `!B41` / `!B40` | Increments drive speed gear by `10%` (max `100%`, default `30%`) |
+| **Forward (`UP`)** | `!B51` / `!B50` | Drives forward at `+speed_gear`; resets to `0%` on release |
+| **Reverse (`DOWN`)** | `!B61` / `!B60` | Drives reverse at `-speed_gear`; resets to `0%` on release |
+| **Steer Left (`LEFT`)** | `!B71` / `!B70` | Steers front servo left (`-25°`); centers to `0°` on release |
+| **Steer Right (`RIGHT`)** | `!B81` / `!B80` | Steers front servo right (`+25°`); centers to `0°` on release |
 
-### 3.3. Live Terminal Tuning Commands (UART Terminal Mode)
+### 3.3. Text Commands & Telemetry Format
 
 | Command Syntax | Valid Range | Default Value | Description |
 | :--- | :---: | :---: | :--- |
-| `EN:<0\|1>` | $0$ or $1$ | $0$ | Enable ($1$) or disable ($0$) balance control |
-| `SPD:<val>` | $-100 \dots +100$ | $0$ | Direct rear motor drive throttle percentage |
-| `STR:<val>` | $-45 \dots +45$ | $0$ | Direct steering servo angle in degrees |
-| `KP:<val>` | $0.0 \dots 200.0$ | $45.0$ | Proportional gain $K_p$ for inner balance loop |
-| `KD:<val>` | $0.0 \dots 50.0$ | $3.80$ | Derivative gain $K_d$ for inner balance loop |
-| `TRIM:<val>` | $0.0 \dots 10.0$ | $0.50$ | Trim gain $K_{\text{trim}}$ for outer momentum dumping loop |
-| `OFS:<val>` | $-10.0 \dots +10.0$ | $+1.30$ | Nominal static balance offset angle in degrees |
-| `STATUS` / `PING` | -- | -- | Print active runtime state and firmware version to terminal |
-| `STOP` | -- | -- | Instantaneous disarm and actuator shutdown |
-| `RESET` / `REBOOT` | -- | -- | Send zero frame, flush UART, emit beep, and software reboot ESP32 |
+| `EN:<0\|1>` | `0` or `1` | `0` | Enable (`1`) or disable (`0`) balance control |
+| `SPD:<val>` | `-100 .. +100` | `0` | Direct rear wheel throttle percentage (`45 ms` paced from joystick) |
+| `STR:<val>` | `-45 .. +45` | `0` | Direct steering angle in degrees (Web UI sends `-25 .. +25`) |
+| `KP:<val>` | `0.0 .. 200.0` | `46.0` | Inner-loop proportional gain `Kp` |
+| `KD:<val>` | `0.0 .. 50.0` | `2.00` | Inner-loop derivative gain `Kd` |
+| `TRIM:<val>` | `0.0 .. 10.0` | `0.036` | Parsed by ESP32; terminated in `BalancingBike.slx` (`Const_Kw = 0.036` fixed) |
+| `OFS:<val>` | `-10.0 .. +10.0` | `-1.01` | Parsed by ESP32; terminated in `BalancingBike.slx` (`Const_Offset = -1.005` fixed) |
+| `STATUS` / `PING` | `n/a` | `n/a` | Requests immediate ESP32 status line (`OK \| EN:... KP:... KD:...`) |
+| `STOP` / `ESTOP` | `n/a` | `n/a` | Clears enable, throttle, and steering immediately |
+| `RESET` / `REBOOT` | `n/a` | `n/a` | Sends zero frame, flushes UART, and restarts ESP32-C3 |
+
+In `BalancingBike.slx`, `USART1_BLE` drives `Enable_Switch`, `Drive_Speed`, `Steer_Angle`, `Kp`, and `Kd` live. Its `K_trim` and `Nominal_Offset` outputs are terminated so `Const_Kw` (`0.036`) and `Const_Offset` (`-1.005°`) remain fixed in flash. STM32 live telemetry is forwarded to the phone as `[STM32] A:<roll> R:<rpm> O:<active_offset> E:<0|1>`, and the Web UI updates the `Ofs` readout exclusively from this live STM32 stream.
 
 ---
 
-## 4. Binary Inter-MCU Packet Structure ($14\text{ Bytes}$)
+## 4. Binary Inter-MCU Packet (`14 Bytes`)
 
-Frames are transmitted from `ESP32-C3` (`GPIO21`) to `STM32F411RE` (`PA10`) in little-endian format at $50\text{ Hz}$ ($20\text{ ms}$ interval):
+Frames transmit from `ESP32-C3` (`GPIO21`) to `STM32F411RE` (`PA10`) in little-endian byte order at `50 Hz` (`20 ms`) plus immediately on incoming BLE writes:
 
-| Byte Index | Field Name | Data Type | Scaling Factor | Description |
+| Byte Index | Field Name | Type | Scaling Factor | Description |
 | :---: | :--- | :---: | :---: | :--- |
-| `0` | `HEADER_1` | `uint8` | — | Sync byte 1: `0xAA` |
-| `1` | `HEADER_2` | `uint8` | — | Sync byte 2: `0x55` |
-| `2` | `Enable_Switch` | `uint8` | $\times 1$ | Controller arm state (`0` or `1`) |
-| `3` | `Drive_Speed` | `int8` | $\times 1$ | Rear motor throttle ($-100 \dots +100\%$) |
-| `4` | `Steer_Angle` | `int8` | $\times 1$ | Steering angle ($-45^\circ \dots +45^\circ$) |
-| `5..6` | `Kp_Scaled` | `uint16` | $\times 10$ | $K_p \times 10$ (e.g. $45.0 \to 450$) |
-| `7..8` | `Kd_Scaled` | `uint16` | $\times 100$ | $K_d \times 100$ (e.g. $3.80 \to 380$) |
-| `9..10` | `Ktrim_Scaled` | `uint16` | $\times 100$ | $K_{\text{trim}} \times 100$ (e.g. $0.50 \to 50$) |
-| `11..12` | `Offset_Scaled` | `int16` | $\times 100$ | Nominal offset angle $\times 100$ (e.g. $+1.30^\circ \to 130$) |
-| `13` | `Checksum` | `uint8` | — | Longitudinal XOR checksum over bytes 2 through 12 |
-
-Checksum verification formula at the STM32 receiver:
+| `0` | `HEADER_1` | `uint8` | `n/a` | Sync byte 1: `0xAA` |
+| `1` | `HEADER_2` | `uint8` | `n/a` | Sync byte 2: `0x55` |
+| `2` | `Enable_Switch` | `uint8` | `x 1` | Controller enable flag (`0` or `1`) |
+| `3` | `Drive_Speed` | `int8` | `x 1` | Rear motor throttle (`-100 .. +100%`) |
+| `4` | `Steer_Angle` | `int8` | `x 1` | Steering angle (`-45° .. +45°`) |
+| `5..6` | `Kp_Scaled` | `uint16` | `x 10` | `Kp * 10` (e.g. `46.0 -> 460`) |
+| `7..8` | `Kd_Scaled` | `uint16` | `x 100` | `Kd * 100` (e.g. `2.00 -> 200`) |
+| `9..10` | `Ktrim_Scaled` | `uint16` | `x 100` | `K_trim * 100` (e.g. `0.036 -> 4`) |
+| `11..12` | `Offset_Scaled` | `int16` | `x 100` | Nominal offset * 100 (e.g. `-1.01° -> -101`) |
+| `13` | `Checksum` | `uint8` | `n/a` | Bitwise XOR checksum over bytes `2` through `12` |
 
 $$\text{Checksum} = \bigoplus_{k=2}^{12} \text{Frame}[k]$$
 
 ---
 
-## 5. Acoustic Buzzer Feedback & Thermal Management
+## 5. Buzzer Feedback & Power States (`ESP32-C3`)
 
-### 5.1. Non-Blocking Buzzer Patterns (2.7 kHz Resonance)
-- **Single Short Beep (80 ms):** Triggered on BLE client connection, parameter tuning command acknowledge, or enable command.
-- **Double Beep (70 ms ON / 70 ms OFF / 70 ms ON):** Triggered upon receiving the first dynamic offset confirmation from STM32 or nominal offset adjustment.
-- **Triple Beep (70 ms cadence):** Triggered on BLE disconnect, emergency stop, or hibernation entry.
+### 5.1. Non-Blocking Buzzer Patterns (`PIN_BUZZER = GPIO3`, `2.7 kHz`)
+- **Single Short Beep (`80 ms`):** BLE client connect, `STATUS`, `KP:`, `KD:`, `TRIM:`, or `EN:1`.
+- **Double Beep (`70 ms ON / 70 ms OFF / 70 ms ON`):** First STM32 telemetry packet received after arming or `OFS:` command.
+- **Long Single Beep (`350 ms`):** BLE disconnect, `EN:0`, `STOP`, or hibernation entry.
 
-### 5.2. 3-Tier Power & Thermal Management
-1. **Active Connected Mode:** CPU clock at 80 MHz, BLE TX power at 0 dBm (`ESP_PWR_LVL_N0`), continuous 50 Hz frame transmission.
-2. **Eco Standby Mode (Triggered after 60s idle disconnect):** Advertising interval relaxed to 800 ms – 1000 ms, RF power reduced to -6 dBm, single 60 ms LED flash every 2.0 s, periodic frames halted.
-3. **Duty-Cycled Hibernation Mode (Triggered after 180s idle disconnect):** Deep radio duty-cycling with 4.0s radio OFF followed by 1.0s radio ON at -3 dBm. Reduces thermal dissipation and power draw significantly while allowing spontaneous reconnection without physical power cycling.
+### 5.2. Radio Power Management
+1. **Active Connected Mode:** CPU at `80 MHz`, BLE TX power `0 dBm` (`ESP_PWR_LVL_N0`), status LED solid ON (`LOW`), `50 Hz` UART frames active.
+2. **Eco Standby (`> 60 s` disconnected):** Advertising interval relaxed to `800 ms .. 1000 ms`, TX power `-6 dBm`, short LED blink every `2 s`, periodic UART frames paused.
+3. **Duty-Cycled Hibernation (`> 180 s` disconnected):** Cycles radio OFF for `4.0 s` and advertising ON for `1.0 s` at `-3 dBm` until a client reconnects.

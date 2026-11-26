@@ -1,21 +1,13 @@
-# Development Roadmap & System Milestones
+# Project Milestones & Future Work
 
-### Phase 1: Peripheral Interfacing & Inertial State Estimation
-- Configure I2C Fast-Mode at $400\text{ kHz}$ to stream 14-byte raw sensor frames from the MPU-6050 and build the discrete 1D adaptive Kalman filter.
-- Configure STM32F411RE hardware peripherals: `TIM1` (20 kHz PWM), `TIM2` (rear encoder), `TIM3` (flywheel encoder), `TIM4` (servo PWM), and `ADC1_IN4` (potentiometer feedback).
+## Completed Milestones
+1. **Hardware Bring-Up & Peripheral Drivers:** Built register-level C++ Simulink System Objects for `TIM3` / `TIM2` 4x quadrature encoders and `USART1` `DMA2_Stream2` telemetry/command framing on `STM32F411RE`.
+2. **Mechanical Frame Migration:** Transitioned to RemRC `5887157` (`6 mm` bolted PETG truss frame, `GT2-280mm` belt) + Pontifex42 `5995416` (`685ZZ` bearing front wheel) with balanced side ballast.
+3. **Pure-Block Simulink Controller (`BalancingBike.slx`):** Replaced legacy MATLAB Function scripts with native Simulink blocks running at `200 Hz` (`Kp = 46.0`, `Kd = 2.0`, `Kw = 0.036`, `Const_Offset = -1.005°`, `±1.5°` integral trim, `2°/12°` hysteresis arming). Verified >`5.5 min` continuous stationary balancing and ~`0.9 s` disturbance recovery.
+4. **ESP32-C3 BLE Bridge & iPhone Bluefy Web UI:** Implemented `BalancingBike-C3` NimBLE server (`MTU = 185`, `50 Hz` `14-byte` XOR frames to STM32) and published the two-handed `docs/index.html` controller (`Joy`/`Pad` modes, live `Roll`/`RPM`/`Ofs`, `E-STOP`, live `KP`/`KD` tuning).
+5. **Untethered Driving & Steering Validation:** Wired `Drive_Speed` and `Steer_Angle` into `DRIVE and MOTION` and verified stable `5 min` wireless forward, reverse, and cornering runs without tipping.
 
-### Phase 2: Actuator Drivers & Calibration State Machine
-- Develop `fcn_Nidec_Driver` with active-low $20\text{ kHz}$ PWM, deadband compensation, one-sample reversal blanking, and two-stage braking.
-- Implement the automatic static center-of-mass calibration state machine, over-tilt shutdown logic, and latched fault reset routines.
-
-### Phase 3: Adaptive Kalman Tuning & Phase-Lag Minimization
-- Establish the filter-to-controller handshake using the `Gyro_X_Rate = 999.0` busy flag during initial 200-sample gyro drift profiling.
-- Implement adaptive measurement noise covariance ($R$) scaling based on total acceleration magnitude ($|\mathbf{a}| \ne 1g$) to reject centripetal and tangential disturbances; tune low-pass gyro rate filter coefficient to $0.60$.
-
-### Phase 4: Cascaded Two-Loop Balance Controller Integration
-- Synthesize non-linear gravity feedforward, inner PID with anti-windup clamping, and an $8.0\% / 5\text{ ms}$ slew-rate limiter.
-- Combine outer momentum dumping loop using TIM3 velocity feedback with soft linear power derating between $2500\text{ RPM}$ and $3000\text{ RPM}$.
-
-### Phase 5: Wireless BLE 5.0 Co-Processor & Telemetry Bridge
-- Develop BLE 5.0 server firmware on ESP32-C3 Super Mini implementing the Nordic UART Service (NUS) for iOS interoperability.
-- Implement fixed 14-byte XOR-checksummed binary packet protocol over `USART1` (`PA9`/`PA10`) at $50\text{ Hz}$ for gamepad steering, throttle, live parameter tuning, and acoustic buzzer feedback.
+## Future Work
+- **Closed-Loop Rear Speed Control (`ENCODER_TIM2`):** Tune a light speed regulator or cornering lean feedforward using `RPM_Back`, which is currently decoded and available inside `DRIVE and MOTION`.
+- **Nonlinear / Fuzzy Controller Benchmarking:** Benchmark a `PD-Fuzzy` or adaptive inner loop against `PD + Kw` on the same `STM32F411RE` hardware under step disturbances (`POT%`, settling time, `IAE`/`ISE`).
+- **Dynamic Model vs. Hardware Correlation:** Formulate the full nonlinear Euler-Lagrange equations and overlay simulated step responses directly against logged SDI hardware traces.
